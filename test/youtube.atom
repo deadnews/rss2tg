@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015"
+      xmlns:media="http://search.yahoo.com/mrss/"
+      xmlns="http://www.w3.org/2005/Atom">
+  <link rel="self" href="http://www.youtube.com/feeds/videos.xml?channel_id=UCSrZ3UV4jOidv8ppoVuvW9Q"/>
+  <id>yt:channel:SrZ3UV4jOidv8ppoVuvW9Q</id>
+  <yt:channelId>SrZ3UV4jOidv8ppoVuvW9Q</yt:channelId>
+  <title>euronews</title>
+  <link rel="alternate" href="https://www.youtube.com/channel/UCSrZ3UV4jOidv8ppoVuvW9Q"/>
+  <author>
+    <name>euronews</name>
+    <uri>https://www.youtube.com/channel/UCSrZ3UV4jOidv8ppoVuvW9Q</uri>
+  </author>
+  <published>2006-09-19T02:45:15+00:00</published>
+
+  <entry>
+    <id>yt:video:U7K88ti42kI</id>
+    <yt:videoId>U7K88ti42kI</yt:videoId>
+    <yt:channelId>UCSrZ3UV4jOidv8ppoVuvW9Q</yt:channelId>
+    <title>Turkish Airlines plane evacuated after landing gear fire in Nepal, officials say</title>
+    <link rel="alternate" href="https://www.youtube.com/watch?v=U7K88ti42kI"/>
+    <author>
+      <name>euronews</name>
+      <uri>https://www.youtube.com/channel/UCSrZ3UV4jOidv8ppoVuvW9Q</uri>
+    </author>
+    <published>2026-05-11T10:45:57+00:00</published>
+    <updated>2026-05-11T11:20:00+00:00</updated>
+    <media:group>
+      <media:title>Turkish Airlines plane evacuated after landing gear fire in Nepal, officials say</media:title>
+      <media:content url="https://www.youtube.com/v/U7K88ti42kI?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+      <media:thumbnail url="https://i2.ytimg.com/vi/U7K88ti42kI/hqdefault.jpg" width="480" height="360"/>
+      <media:description>Turkish Airlines plane evacuated after landing gear fire in Nepal, officials say. READ MORE: http://www.euronews.com/2026/05/11/turkish-airlines-plane-evacuated-after-landing-gear-fire-in-nepal-officials-say</media:description>
+      <media:community>
+        <media:starRating count="0" average="0.00" min="1" max="5"/>
+        <media:statistics views="23"/>
+      </media:community>
+    </media:group>
+  </entry>
+
+  <entry>
+    <id>yt:video:vsdApGt9d4k</id>
+    <yt:videoId>vsdApGt9d4k</yt:videoId>
+    <yt:channelId>UCSrZ3UV4jOidv8ppoVuvW9Q</yt:channelId>
+    <title>Europe Today Explains: Reform UK surge — trouble for Starmer?</title>
+    <link rel="alternate" href="https://www.youtube.com/shorts/vsdApGt9d4k"/>
+    <author>
+      <name>euronews</name>
+      <uri>https://www.youtube.com/channel/UCSrZ3UV4jOidv8ppoVuvW9Q</uri>
+    </author>
+    <published>2026-05-11T10:19:44+00:00</published>
+    <updated>2026-05-11T11:29:50+00:00</updated>
+    <media:group>
+      <media:title>Europe Today Explains: Reform UK surge — trouble for Starmer?</media:title>
+      <media:content url="https://www.youtube.com/v/vsdApGt9d4k?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+      <media:thumbnail url="https://i3.ytimg.com/vi/vsdApGt9d4k/hqdefault.jpg" width="480" height="360"/>
+      <media:description>After Reform UK's local election surge, is Starmer's future at risk? #EuropeTodayExplains</media:description>
+      <media:community>
+        <media:starRating count="7" average="5.00" min="1" max="5"/>
+        <media:statistics views="260"/>
+      </media:community>
+    </media:group>
+  </entry>
+
+  <entry>
+    <id>yt:video:dzGldgmacKc</id>
+    <yt:videoId>dzGldgmacKc</yt:videoId>
+    <yt:channelId>UCSrZ3UV4jOidv8ppoVuvW9Q</yt:channelId>
+    <title>Latest news bulletin | May 11th, 2026 – Midday</title>
+    <link rel="alternate" href="https://www.youtube.com/watch?v=dzGldgmacKc"/>
+    <author>
+      <name>euronews</name>
+      <uri>https://www.youtube.com/channel/UCSrZ3UV4jOidv8ppoVuvW9Q</uri>
+    </author>
+    <published>2026-05-11T10:08:58+00:00</published>
+    <updated>2026-05-11T11:13:09+00:00</updated>
+    <media:group>
+      <media:title>Latest news bulletin | May 11th, 2026 – Midday</media:title>
+      <media:content url="https://www.youtube.com/v/dzGldgmacKc?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+      <media:thumbnail url="https://i1.ytimg.com/vi/dzGldgmacKc/hqdefault.jpg" width="480" height="360"/>
+      <media:description>Catch up with the most important stories from around Europe and beyond this May 11th, 2026.</media:description>
+      <media:community>
+        <media:starRating count="8" average="5.00" min="1" max="5"/>
+        <media:statistics views="214"/>
+      </media:community>
+    </media:group>
+  </entry>
+
+  <entry>
+    <id>yt:video:8Gdm2FXCzo4</id>
+    <yt:videoId>8Gdm2FXCzo4</yt:videoId>
+    <yt:channelId>UCSrZ3UV4jOidv8ppoVuvW9Q</yt:channelId>
+    <title>WHO urges calm over hantavirus outbreak</title>
+    <link rel="alternate" href="https://www.youtube.com/shorts/8Gdm2FXCzo4"/>
+    <author>
+      <name>euronews</name>
+      <uri>https://www.youtube.com/channel/UCSrZ3UV4jOidv8ppoVuvW9Q</uri>
+    </author>
+    <published>2026-05-11T09:01:56+00:00</published>
+    <updated>2026-05-11T09:29:22+00:00</updated>
+    <media:group>
+      <media:title>WHO urges calm over hantavirus outbreak</media:title>
+      <media:content url="https://www.youtube.com/v/8Gdm2FXCzo4?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+      <media:thumbnail url="https://i1.ytimg.com/vi/8Gdm2FXCzo4/hqdefault.jpg" width="480" height="360"/>
+      <media:description>"This is not another COVID." WHO chief Tedros Adhanom Ghebreyesus urged people not to panic.</media:description>
+      <media:community>
+        <media:starRating count="9" average="5.00" min="1" max="5"/>
+        <media:statistics views="683"/>
+      </media:community>
+    </media:group>
+  </entry>
+
+  <entry>
+    <id>yt:video:RBJj0REoeIo</id>
+    <yt:videoId>RBJj0REoeIo</yt:videoId>
+    <yt:channelId>UCSrZ3UV4jOidv8ppoVuvW9Q</yt:channelId>
+    <title>Swedish FM slams Putin: "Russia is not interested in peace"</title>
+    <link rel="alternate" href="https://www.youtube.com/watch?v=RBJj0REoeIo"/>
+    <author>
+      <name>euronews</name>
+      <uri>https://www.youtube.com/channel/UCSrZ3UV4jOidv8ppoVuvW9Q</uri>
+    </author>
+    <published>2026-05-11T07:51:11+00:00</published>
+    <updated>2026-05-11T09:35:30+00:00</updated>
+    <media:group>
+      <media:title>Swedish FM slams Putin: "Russia is not interested in peace"</media:title>
+      <media:content url="https://www.youtube.com/v/RBJj0REoeIo?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+      <media:thumbnail url="https://i3.ytimg.com/vi/RBJj0REoeIo/hqdefault.jpg" width="480" height="360"/>
+      <media:description>"Russia is not really interested in peace" — Swedish FM Maria Malmer Stenergard slams Putin on #EuropeToday.</media:description>
+      <media:community>
+        <media:starRating count="13" average="5.00" min="1" max="5"/>
+        <media:statistics views="232"/>
+      </media:community>
+    </media:group>
+  </entry>
+</feed>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+    <channel>
+        <title>Hacker News Daily Top 30</title>
+        <link>https://github.com/meixger/hackernews-daily/issues/</link>
+        <item>
+            <title><![CDATA[Hacker News Daily Top 30 @2026-04-11]]></title>
+            <link>https://github.com/meixger/hackernews-daily/issues/1304</link>
+            <guid isPermaLink="false">1304</guid>
+            <pubDate>Sat, 11 Apr 2026 06:00:34 GMT</pubDate>
+            <content:encoded><![CDATA[<ol>
+<li><a href="https://www.numerique.gouv.fr/sinformer/espace-presse/souverainete-numerique-reduction-dependances-extra-europeennes/"><strong>France Launches Government Linux Desktop Plan as Windows Exit Begins</strong> <code>www.numerique.gouv.fr</code></a> - <a href="https://news.ycombinator.com/item?id=47716043">423 comments 832 points</a></li>
+<li><a href="https://rowan441.github.io/1dchess/chess.html"><strong>1D Chess</strong> <code>rowan441.github.io</code></a> - <a href="https://news.ycombinator.com/item?id=47719740">135 comments 747 points</a></li>
+<li><a href="https://www.cbsnews.com/live-updates/artemis-ii-splashdown-return/"><strong>Artemis II safely splashes down</strong> <code>www.cbsnews.com</code></a> - <a href="https://news.ycombinator.com/item?id=47725583">249 comments 705 points</a></li>
+</ol>]]></content:encoded>
+        </item>
+    </channel>
+</rss>

@@ -1,0 +1,23 @@
+services:
+  service:
+    build: .
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    healthcheck:
+      test: [CMD, /bin/pidcheck, --pid, "1"]
+      interval: 1m
+      retries: 3
+      timeout: 10s
+      start_period: 10s
+    volumes:
+      - data:/data:rw
+    environment:
+      - RSS2TG_TOKEN
+      - RSS2TG_MANAGER
+
+volumes:
+  data:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
