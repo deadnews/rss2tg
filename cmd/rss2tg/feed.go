@@ -92,12 +92,30 @@ func (bot *Bot) sendEntry(ctx context.Context, item *gofeed.Item, feedTitle, fee
 	case formatText:
 		err = bot.tg.SendMessage(ctx, chat.ChatID, format.Text(item), true)
 	default:
-		err = bot.tg.SendMessage(ctx, chat.ChatID, format.Link(item), false)
+		err = bot.tg.SendMessage(ctx, chat.ChatID, format.Link(item, bot.youtubeMeta(ctx, item.Link)), false)
 	}
 	if err != nil {
 		return fmt.Errorf("send entry: %w", err)
 	}
 	return nil
+}
+
+// youtubeMeta returns the YouTube meta line, or empty on missing key,
+// non-YouTube link, or API error (entry then sends unenriched).
+func (bot *Bot) youtubeMeta(ctx context.Context, link string) string {
+	if bot.cfg.YouTubeKey == "" {
+		return ""
+	}
+	id, ok := youtube.ExtractVideoID(link)
+	if !ok {
+		return ""
+	}
+	info, err := youtube.FetchVideoInfo(ctx, bot.cfg.YouTubeKey, id)
+	if err != nil {
+		slog.Warn("YouTube enrichment failed", "id", id, "error", err)
+		return ""
+	}
+	return info.MetaLine()
 }
 
 func itemGUID(item *gofeed.Item) string {

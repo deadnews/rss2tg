@@ -9,19 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIsShort(t *testing.T) {
-	tests := map[string]bool{
-		"https://www.youtube.com/shorts/abc123":    true,
-		"https://www.youtube.com/watch?v=abc123":   false,
-		"https://example.com/shorts/abc":           false,
-		"https://www.youtube.com/feeds/videos.xml": false,
-		"": false,
-	}
-	for url, want := range tests {
-		assert.Equal(t, want, IsShort(url), url)
-	}
-}
-
 func TestResolveURL(t *testing.T) {
 	t.Run("non-YouTube URL passes through", func(t *testing.T) {
 		got, err := ResolveURL(t.Context(), "https://example.com/feed.xml")

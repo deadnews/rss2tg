@@ -56,8 +56,7 @@ sub as the exact `/sub` line to copy, edit, and resend).
 `link` (default) — bold title + URL:
 
 ```html
-<b>Post Title</b>
-URL
+<b>Post Title</b> URL
 ```
 
 `pw` — photo + title + excerpt + attribution (falls back to text if no image):

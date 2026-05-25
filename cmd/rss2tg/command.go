@@ -30,11 +30,11 @@ var validFormats = map[string]bool{
 
 const helpText = `<b>Available commands:</b>
 
-/sub &lt;url&gt; [link|pw|text] [shorts] [exclude:w1,w2] [include:w1,w2] — subscribe to feed
-/unsub &lt;url&gt; — unsubscribe from feed
-/list — list subscriptions
-/format &lt;link|pw|text&gt; — change format for all subs
-/help — show this message
+<code>/sub &lt;url&gt; [link|pw|text] [shorts] [exclude:w1,w2] [include:w1,w2]</code> — subscribe to feed
+<code>/unsub &lt;url&gt;</code> — unsubscribe from feed
+<code>/list</code> — list subscriptions
+<code>/format &lt;link|pw|text&gt;</code> — change format for all subs
+<code>/help</code> — show this message
 
 YouTube channel URLs are auto-resolved to their Atom feed. YouTube Shorts are filtered by default; pass <code>shorts</code> to include them.
 
@@ -165,13 +165,13 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, args []string) {
 	if existed {
 		verb = "Updated subscription for"
 	}
-	bot.reply(ctx, chatID, fmt.Sprintf("%s %s (%s)", verb, url, opts.format))
+	bot.reply(ctx, chatID, fmt.Sprintf("%s %s (%s)", verb, url, sub.Format))
 	bot.deliverInitialEntries(ctx, url, feed, []store.ChatFeed{{
 		ChatID:  chatID,
-		Format:  opts.format,
-		Shorts:  opts.shorts,
-		Exclude: opts.exclude,
-		Include: opts.include,
+		Format:  sub.Format,
+		Shorts:  sub.Shorts,
+		Exclude: sub.Exclude,
+		Include: sub.Include,
 	}})
 }
 

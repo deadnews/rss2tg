@@ -9,10 +9,11 @@ import (
 
 // Config holds application configuration loaded from environment variables.
 type Config struct {
-	BotToken string
-	Manager  int64
-	Interval time.Duration
-	DBPath   string
+	BotToken   string
+	Manager    int64
+	Interval   time.Duration
+	DBPath     string
+	YouTubeKey string
 }
 
 // LoadConfig loads configuration from environment variables.
@@ -46,9 +47,10 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &Config{
-		BotToken: token,
-		Manager:  manager,
-		Interval: interval,
-		DBPath:   dbPath,
+		BotToken:   token,
+		Manager:    manager,
+		Interval:   interval,
+		DBPath:     dbPath,
+		YouTubeKey: os.Getenv("RSS2TG_YOUTUBE_KEY"),
 	}, nil
 }

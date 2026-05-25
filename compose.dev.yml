@@ -15,6 +15,7 @@ services:
     environment:
       - RSS2TG_TOKEN
       - RSS2TG_MANAGER
+      - RSS2TG_YOUTUBE_KEY
 
 volumes:
   data:

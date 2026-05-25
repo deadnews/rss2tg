@@ -1,4 +1,5 @@
-// Package youtube resolves YouTube channel/handle URLs to Atom feeds.
+// Package youtube resolves YouTube channel URLs to Atom feeds
+// and enriches video entries via the YouTube Data API.
 package youtube
 
 import (
@@ -14,8 +15,9 @@ import (
 )
 
 const (
-	feedURLBase  = "https://www.youtube.com/feeds/videos.xml?channel_id="
-	fetchTimeout = 10 * time.Second
+	feedURLBase     = "https://www.youtube.com/feeds/videos.xml?channel_id="
+	fetchTimeout    = 10 * time.Second
+	maxResponseBody = 1 << 20
 )
 
 var (
@@ -57,11 +59,6 @@ func ResolveURL(ctx context.Context, raw string) (string, error) {
 	return "", errors.New("channel ID not found in page")
 }
 
-// IsShort reports whether an entry URL is a YouTube Shorts video.
-func IsShort(link string) bool {
-	return strings.Contains(link, "youtube.com/shorts/")
-}
-
 func isYouTubeHost(host string) bool {
 	host = strings.TrimPrefix(host, "www.")
 	host = strings.TrimPrefix(host, "m.")
@@ -98,7 +95,7 @@ func fetchChannelPage(ctx context.Context, pageURL string) ([]byte, error) {
 		return nil, fmt.Errorf("fetching channel page: status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
 	if err != nil {
 		return nil, fmt.Errorf("reading channel page: %w", err)
 	}

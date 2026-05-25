@@ -1,26 +1,14 @@
 package main
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"path/filepath"
-	"sync"
 	"testing"
 
-	"github.com/mmcdole/gofeed"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/deadnews/rss2tg/internal/store"
 	"github.com/deadnews/rss2tg/internal/telegram"
 )
-
-// sentMessage captures a message sent via the Telegram API mock.
-type sentMessage struct {
-	ChatID int64  `json:"chat_id"`
-	Text   string `json:"text"`
-}
 
 const commandTestFeed = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
@@ -30,129 +18,98 @@ const commandTestFeed = `<?xml version="1.0" encoding="UTF-8"?>
   </channel>
 </rss>`
 
-func testBot(t *testing.T) (*Bot, *[]sentMessage, string) {
+// newTestCmdBot returns an env serving an item-less feed at /cmd.xml,
+// suitable for /sub command tests that only assert on the reply.
+func newTestCmdBot(t *testing.T) *testBotEnv {
 	t.Helper()
-
-	var mu sync.Mutex
-	var sent []sentMessage
-
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/feed.xml":
-			w.Header().Set("Content-Type", "application/xml")
-			_, _ = w.Write([]byte(commandTestFeed))
-		case r.Method == http.MethodPost:
-			var msg struct {
-				ChatID int64  `json:"chat_id"`
-				Text   string `json:"text"`
-			}
-			_ = json.NewDecoder(r.Body).Decode(&msg)
-			mu.Lock()
-			sent = append(sent, sentMessage{ChatID: msg.ChatID, Text: msg.Text})
-			mu.Unlock()
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	t.Cleanup(ts.Close)
-
-	st, err := store.New(filepath.Join(t.TempDir(), "test.db"))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = st.Close() })
-
-	tg := telegram.NewClient("test-token")
-	tg.BaseURL = ts.URL
-
-	bot := &Bot{
-		cfg:    &Config{Manager: 42},
-		tg:     tg,
-		store:  st,
-		parser: gofeed.NewParser(),
-	}
-
-	return bot, &sent, ts.URL
+	env := newTestBotEnv(t)
+	env.serveXML("/cmd.xml", []byte(commandTestFeed))
+	return env
 }
 
 func TestHandleCommandUnauthorized(t *testing.T) {
-	bot, sent, _ := testBot(t)
+	tb := newTestCmdBot(t)
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 999},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/help",
 	})
 
-	assert.Empty(t, *sent)
+	assert.Empty(t, tb.getSent())
 }
 
 func TestHandleCommandChannelPost(t *testing.T) {
-	bot, sent, _ := testBot(t)
+	tb := newTestCmdBot(t)
 
 	// Channel posts have no From — should be allowed (only admins can post).
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		Chat: telegram.Chat{ID: 100},
 		Text: "/help",
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text, "Available commands")
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Available commands")
 }
 
 func TestHandleHelp(t *testing.T) {
-	bot, sent, _ := testBot(t)
+	tb := newTestCmdBot(t)
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/help",
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text, "Available commands")
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Available commands")
 }
 
 func TestHandleStart(t *testing.T) {
-	bot, sent, _ := testBot(t)
+	tb := newTestCmdBot(t)
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/start",
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text, "Available commands")
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Available commands")
 }
 
 func TestHandleHelpWithBotSuffix(t *testing.T) {
-	bot, sent, _ := testBot(t)
+	tb := newTestCmdBot(t)
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/help@mybot",
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text, "Available commands")
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Available commands")
 }
 
 func TestHandleSub(t *testing.T) {
-	bot, sent, baseURL := testBot(t)
-	feedURL := baseURL + "/feed.xml"
+	tb := newTestCmdBot(t)
+	feedURL := tb.ts.URL + "/cmd.xml"
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/sub " + feedURL,
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text, "Subscribed")
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Subscribed")
 
-	subs, err := bot.store.ListSubs(100)
+	subs, err := tb.store.ListSubs(100)
 	require.NoError(t, err)
 	require.Len(t, subs, 1)
 	assert.Equal(t, feedURL, subs[0].URL)
@@ -161,40 +118,41 @@ func TestHandleSub(t *testing.T) {
 }
 
 func TestHandleListShowsTitle(t *testing.T) {
-	bot, sent, baseURL := testBot(t)
-	feedURL := baseURL + "/feed.xml"
+	tb := newTestCmdBot(t)
+	feedURL := tb.ts.URL + "/cmd.xml"
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/sub " + feedURL,
 	})
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/list",
 	})
 
-	require.GreaterOrEqual(t, len(*sent), 2)
-	listMsg := (*sent)[len(*sent)-1].Text
+	sent := tb.getSent()
+	require.GreaterOrEqual(t, len(sent), 2)
+	listMsg := sent[len(sent)-1].Text
 	assert.Contains(t, listMsg, "<b>Command Test Feed</b>")
 	assert.Contains(t, listMsg, "<code>/sub "+feedURL+" link</code>")
 }
 
 func TestHandleSubWithFormat(t *testing.T) {
-	bot, sent, baseURL := testBot(t)
-	feedURL := baseURL + "/feed.xml"
+	tb := newTestCmdBot(t)
+	feedURL := tb.ts.URL + "/cmd.xml"
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/sub " + feedURL + " pw",
 	})
 
-	require.Len(t, *sent, 1)
+	require.Len(t, tb.getSent(), 1)
 
-	subs, err := bot.store.ListSubs(100)
+	subs, err := tb.store.ListSubs(100)
 	require.NoError(t, err)
 	require.Len(t, subs, 1)
 	assert.Equal(t, feedURL, subs[0].URL)
@@ -202,170 +160,181 @@ func TestHandleSubWithFormat(t *testing.T) {
 }
 
 func TestHandleSubNoArgs(t *testing.T) {
-	bot, sent, _ := testBot(t)
+	tb := newTestCmdBot(t)
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/sub",
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text, "Usage")
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Usage")
 }
 
 func TestHandleSubInvalidFormat(t *testing.T) {
-	bot, sent, baseURL := testBot(t)
+	tb := newTestCmdBot(t)
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
-		Text: "/sub " + baseURL + "/feed.xml nope",
+		Text: "/sub " + tb.ts.URL + "/cmd.xml nope",
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text, "Usage")
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Usage")
 
-	subs, err := bot.store.ListSubs(100)
+	subs, err := tb.store.ListSubs(100)
 	require.NoError(t, err)
 	assert.Empty(t, subs)
 }
 
 func TestHandleSubInvalidFeed(t *testing.T) {
-	bot, sent, baseURL := testBot(t)
+	tb := newTestCmdBot(t)
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
-		Text: "/sub " + baseURL + "/missing.xml",
+		Text: "/sub " + tb.ts.URL + "/missing.xml",
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text, "Failed to subscribe")
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Failed to subscribe")
 
-	subs, err := bot.store.ListSubs(100)
+	subs, err := tb.store.ListSubs(100)
 	require.NoError(t, err)
 	assert.Empty(t, subs)
 }
 
 func TestHandleUnsub(t *testing.T) {
-	bot, sent, _ := testBot(t)
+	tb := newTestCmdBot(t)
 
-	_, err := bot.store.AddSub(100, &store.Sub{URL: "https://example.com/feed.xml", Format: "link"})
+	_, err := tb.store.AddSub(100, &store.Sub{URL: "https://example.com/feed.xml", Format: "link"})
 	require.NoError(t, err)
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/unsub https://example.com/feed.xml",
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text, "Unsubscribed")
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Unsubscribed")
 }
 
 func TestHandleUnsubNotFound(t *testing.T) {
-	bot, sent, _ := testBot(t)
+	tb := newTestCmdBot(t)
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/unsub https://example.com/nope.xml",
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text, "Not subscribed")
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Not subscribed")
 }
 
 func TestHandleUnsubNoArgs(t *testing.T) {
-	bot, sent, _ := testBot(t)
+	tb := newTestCmdBot(t)
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/unsub",
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text, "Usage")
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Usage")
 }
 
 func TestHandleList(t *testing.T) {
-	bot, sent, _ := testBot(t)
+	tb := newTestCmdBot(t)
 
-	_, err := bot.store.AddSub(100, &store.Sub{URL: "https://a.com/feed", Format: "link"})
+	_, err := tb.store.AddSub(100, &store.Sub{URL: "https://a.com/feed", Format: "link"})
 	require.NoError(t, err)
-	_, err = bot.store.AddSub(100, &store.Sub{URL: "https://b.com/feed", Format: "pw"})
+	_, err = tb.store.AddSub(100, &store.Sub{URL: "https://b.com/feed", Format: "pw"})
 	require.NoError(t, err)
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/list",
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text, "https://a.com/feed")
-	assert.Contains(t, (*sent)[0].Text, "https://b.com/feed")
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "https://a.com/feed")
+	assert.Contains(t, sent[0].Text, "https://b.com/feed")
 }
 
 func TestHandleListEmpty(t *testing.T) {
-	bot, sent, _ := testBot(t)
+	tb := newTestCmdBot(t)
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/list",
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text, "No subscriptions")
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "No subscriptions")
 }
 
 func TestHandleFormat(t *testing.T) {
-	bot, sent, _ := testBot(t)
+	tb := newTestCmdBot(t)
 
-	_, err := bot.store.AddSub(100, &store.Sub{URL: "https://a.com/feed", Format: "link"})
+	_, err := tb.store.AddSub(100, &store.Sub{URL: "https://a.com/feed", Format: "link"})
 	require.NoError(t, err)
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/format pw",
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text, "Updated 1")
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Updated 1")
 
-	subs, err := bot.store.ListSubs(100)
+	subs, err := tb.store.ListSubs(100)
 	require.NoError(t, err)
 	assert.Equal(t, "pw", subs[0].Format)
 }
 
 func TestHandleFormatNoArgs(t *testing.T) {
-	bot, sent, _ := testBot(t)
+	tb := newTestCmdBot(t)
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/format",
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text, "Usage")
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Usage")
 }
 
 func TestHandleFormatInvalidArg(t *testing.T) {
-	bot, sent, _ := testBot(t)
+	tb := newTestCmdBot(t)
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/format invalid",
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text, "Usage")
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Usage")
 }
 
 func TestParseSubArgs(t *testing.T) {
@@ -421,19 +390,20 @@ func TestParseSubArgs(t *testing.T) {
 }
 
 func TestHandleSubWithFilters(t *testing.T) {
-	bot, sent, baseURL := testBot(t)
-	feedURL := baseURL + "/feed.xml"
+	tb := newTestCmdBot(t)
+	feedURL := tb.ts.URL + "/cmd.xml"
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/sub " + feedURL + " pw exclude:crypto,ai include:go",
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text, "Subscribed")
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Subscribed")
 
-	subs, err := bot.store.ListSubs(100)
+	subs, err := tb.store.ListSubs(100)
 	require.NoError(t, err)
 	require.Len(t, subs, 1)
 	assert.Equal(t, []string{"crypto", "ai"}, subs[0].Exclude)
@@ -441,26 +411,27 @@ func TestHandleSubWithFilters(t *testing.T) {
 }
 
 func TestHandleSubResubReplies(t *testing.T) {
-	bot, sent, baseURL := testBot(t)
-	feedURL := baseURL + "/feed.xml"
+	tb := newTestCmdBot(t)
+	feedURL := tb.ts.URL + "/cmd.xml"
 
 	for range 2 {
-		bot.handleCommand(t.Context(), &telegram.Message{
+		tb.bot.handleCommand(t.Context(), &telegram.Message{
 			From: &telegram.User{ID: 42},
 			Chat: telegram.Chat{ID: 100},
 			Text: "/sub " + feedURL,
 		})
 	}
 
-	require.GreaterOrEqual(t, len(*sent), 2)
-	assert.Contains(t, (*sent)[0].Text, "Subscribed to")
-	assert.Contains(t, (*sent)[1].Text, "Updated subscription for")
+	sent := tb.getSent()
+	require.GreaterOrEqual(t, len(sent), 2)
+	assert.Contains(t, sent[0].Text, "Subscribed to")
+	assert.Contains(t, sent[1].Text, "Updated subscription for")
 }
 
 func TestHandleListRendersFilters(t *testing.T) {
-	bot, sent, _ := testBot(t)
+	tb := newTestCmdBot(t)
 
-	_, err := bot.store.AddSub(100, &store.Sub{
+	_, err := tb.store.AddSub(100, &store.Sub{
 		URL:     "https://a.com/feed",
 		Title:   "Feed A",
 		Format:  "pw",
@@ -470,13 +441,14 @@ func TestHandleListRendersFilters(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	bot.handleCommand(t.Context(), &telegram.Message{
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/list",
 	})
 
-	require.Len(t, *sent, 1)
-	assert.Contains(t, (*sent)[0].Text,
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text,
 		"<code>/sub https://a.com/feed pw shorts exclude:crypto include:go,rust</code>")
 }

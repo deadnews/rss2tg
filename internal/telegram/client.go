@@ -7,12 +7,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 )
 
 // DefaultBaseURL is the production Telegram Bot API endpoint.
 const DefaultBaseURL = "https://api.telegram.org"
+
+const longPollTimeout = 30
 
 // Client is a Telegram Bot API client.
 type Client struct {
@@ -35,7 +38,7 @@ func NewClient(token string) *Client {
 // GetMe validates the bot token.
 func (c *Client) GetMe(ctx context.Context) (*User, error) {
 	var resp Response[User]
-	if err := c.get(ctx, "getMe", "", &resp); err != nil {
+	if err := c.get(ctx, "getMe", nil, &resp); err != nil {
 		return nil, err
 	}
 	if !resp.OK {
@@ -46,7 +49,10 @@ func (c *Client) GetMe(ctx context.Context) (*User, error) {
 
 // GetUpdates long-polls for new updates starting from offset.
 func (c *Client) GetUpdates(ctx context.Context, offset int64) ([]Update, error) {
-	query := "?offset=" + strconv.FormatInt(offset, 10) + "&timeout=30"
+	query := url.Values{
+		"offset":  {strconv.FormatInt(offset, 10)},
+		"timeout": {strconv.Itoa(longPollTimeout)},
+	}
 	var resp Response[[]Update]
 	if err := c.get(ctx, "getUpdates", query, &resp); err != nil {
 		return nil, err
@@ -137,8 +143,12 @@ func (c *Client) post(ctx context.Context, method string, body []byte) (*Respons
 	return &result, nil
 }
 
-func (c *Client) get(ctx context.Context, method, query string, dest any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url(method)+query, http.NoBody)
+func (c *Client) get(ctx context.Context, method string, query url.Values, dest any) error {
+	endpoint := c.url(method)
+	if len(query) > 0 {
+		endpoint += "?" + query.Encode()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("%s: %w", method, err)
 	}

@@ -19,13 +19,18 @@ var (
 	reRedditPreviewImg = regexp.MustCompile(`^https?://preview\.redd\.it/([^?]+)`)
 )
 
-// Link formats an entry as a bold title + URL.
-func Link(item *gofeed.Item) string {
+// Link formats an entry as a bold title + URL;
+// meta inserts between them when non-empty.
+func Link(item *gofeed.Item, meta string) string {
 	var b strings.Builder
 	if item.Title != "" {
 		b.WriteString("<b>")
 		b.WriteString(html.EscapeString(item.Title))
 		b.WriteString("</b>")
+		if meta != "" {
+			b.WriteString("\n")
+			b.WriteString(meta)
+		}
 		if item.Link != "" {
 			b.WriteString("\n")
 			b.WriteString(html.EscapeString(item.Link))

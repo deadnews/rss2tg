@@ -45,7 +45,13 @@ func readTestdata(t *testing.T, name string) []byte {
 	return data
 }
 
-type testFeedBot struct {
+// sentMessage captures a message sent via the Telegram API mock.
+type sentMessage struct {
+	ChatID int64  `json:"chat_id"`
+	Text   string `json:"text"`
+}
+
+type testBotEnv struct {
 	bot   *Bot
 	store *store.Store
 	mu    *sync.Mutex
@@ -54,49 +60,33 @@ type testFeedBot struct {
 	mux   *http.ServeMux
 }
 
-func newTestFeedBot(t *testing.T) *testFeedBot {
+// newTestBotEnv wires a Bot with a mock Telegram server that captures POSTed messages.
+// Tests register feed routes on env.mux as needed.
+func newTestBotEnv(t *testing.T) *testBotEnv {
 	t.Helper()
 
 	var mu sync.Mutex
 	var sent []sentMessage
 
-	hnXML := readTestdata(t, "hn.xml")
-	redditAtom := readTestdata(t, "reddit.atom")
-	youtubeAtom := readTestdata(t, "youtube.atom")
-
 	mux := http.NewServeMux()
-	mux.HandleFunc("/feed.xml", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/xml")
-		_, _ = w.Write([]byte(testRSS))
-	})
-	mux.HandleFunc("/hn.xml", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/xml")
-		_, _ = w.Write(hnXML)
-	})
-	mux.HandleFunc("/reddit.atom", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/atom+xml")
-		_, _ = w.Write(redditAtom)
-	})
-	mux.HandleFunc("/youtube.atom", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/atom+xml")
-		_, _ = w.Write(youtubeAtom)
-	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			var raw struct {
-				ChatID  int64  `json:"chat_id"`
-				Text    string `json:"text"`
-				Caption string `json:"caption"`
-			}
-			_ = json.NewDecoder(r.Body).Decode(&raw)
-			text := raw.Text
-			if text == "" {
-				text = raw.Caption
-			}
-			mu.Lock()
-			sent = append(sent, sentMessage{ChatID: raw.ChatID, Text: text})
-			mu.Unlock()
+		if r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
 		}
+		var raw struct {
+			ChatID  int64  `json:"chat_id"`
+			Text    string `json:"text"`
+			Caption string `json:"caption"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&raw)
+		text := raw.Text
+		if text == "" {
+			text = raw.Caption
+		}
+		mu.Lock()
+		sent = append(sent, sentMessage{ChatID: raw.ChatID, Text: text})
+		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
@@ -118,19 +108,37 @@ func newTestFeedBot(t *testing.T) *testFeedBot {
 		parser: gofeed.NewParser(),
 	}
 
-	return &testFeedBot{bot: bot, store: st, mu: &mu, sent: &sent, ts: ts, mux: mux}
+	return &testBotEnv{bot: bot, store: st, mu: &mu, sent: &sent, ts: ts, mux: mux}
 }
 
-func (tb *testFeedBot) getSent() []sentMessage {
+// serveXML registers a static XML handler on the env's mux.
+func (tb *testBotEnv) serveXML(path string, body []byte) {
+	tb.mux.HandleFunc(path, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = w.Write(body)
+	})
+}
+
+func (tb *testBotEnv) getSent() []sentMessage {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	return append([]sentMessage(nil), *tb.sent...)
 }
 
-func (tb *testFeedBot) resetSent() {
+func (tb *testBotEnv) resetSent() {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	*tb.sent = nil
+}
+
+func newTestFeedBot(t *testing.T) *testBotEnv {
+	t.Helper()
+	env := newTestBotEnv(t)
+	env.serveXML("/feed.xml", []byte(testRSS))
+	env.serveXML("/hn.xml", readTestdata(t, "hn.xml"))
+	env.serveXML("/reddit.atom", readTestdata(t, "reddit.atom"))
+	env.serveXML("/youtube.atom", readTestdata(t, "youtube.atom"))
+	return env
 }
 
 func TestCheckFeeds(t *testing.T) {
