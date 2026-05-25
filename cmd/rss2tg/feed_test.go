@@ -136,7 +136,7 @@ func (tb *testFeedBot) resetSent() {
 func TestCheckFeeds(t *testing.T) {
 	tb := newTestFeedBot(t)
 
-	err := tb.store.AddSub(100, store.Sub{URL: tb.ts.URL + "/feed.xml", Format: "link"})
+	_, err := tb.store.AddSub(100, &store.Sub{URL: tb.ts.URL + "/feed.xml", Format: "link"})
 	require.NoError(t, err)
 
 	tb.bot.checkFeeds(t.Context())
@@ -151,7 +151,7 @@ func TestCheckFeeds(t *testing.T) {
 func TestCheckFeedsPreviewFormat(t *testing.T) {
 	tb := newTestFeedBot(t)
 
-	err := tb.store.AddSub(100, store.Sub{URL: tb.ts.URL + "/feed.xml", Format: "pw"})
+	_, err := tb.store.AddSub(100, &store.Sub{URL: tb.ts.URL + "/feed.xml", Format: "pw"})
 	require.NoError(t, err)
 
 	tb.bot.checkFeeds(t.Context())
@@ -213,7 +213,7 @@ func TestItemGUID(t *testing.T) {
 func TestCheckFeedsTextFormat(t *testing.T) {
 	tb := newTestFeedBot(t)
 
-	err := tb.store.AddSub(100, store.Sub{URL: tb.ts.URL + "/hn.xml", Format: "text"})
+	_, err := tb.store.AddSub(100, &store.Sub{URL: tb.ts.URL + "/hn.xml", Format: "text"})
 	require.NoError(t, err)
 
 	tb.bot.checkFeeds(t.Context())
@@ -238,7 +238,7 @@ func TestCheckFeedsYouTubeFiltersShorts(t *testing.T) {
 	tb := newTestFeedBot(t)
 
 	feedURL := tb.ts.URL + "/youtube.atom"
-	err := tb.store.AddSub(100, store.Sub{URL: feedURL, Format: "link"})
+	_, err := tb.store.AddSub(100, &store.Sub{URL: feedURL, Format: "link"})
 	require.NoError(t, err)
 
 	tb.bot.checkFeeds(t.Context())
@@ -256,7 +256,7 @@ func TestCheckFeedsYouTubeIncludesShortsWhenEnabled(t *testing.T) {
 	tb := newTestFeedBot(t)
 
 	feedURL := tb.ts.URL + "/youtube.atom"
-	err := tb.store.AddSub(100, store.Sub{URL: feedURL, Format: "link", Shorts: true})
+	_, err := tb.store.AddSub(100, &store.Sub{URL: feedURL, Format: "link", Shorts: true})
 	require.NoError(t, err)
 
 	tb.bot.checkFeeds(t.Context())
@@ -279,7 +279,7 @@ func TestCheckFeedsYouTubeMarksShortsSeen(t *testing.T) {
 	tb := newTestFeedBot(t)
 
 	feedURL := tb.ts.URL + "/youtube.atom"
-	err := tb.store.AddSub(100, store.Sub{URL: feedURL, Format: "link"})
+	_, err := tb.store.AddSub(100, &store.Sub{URL: feedURL, Format: "link"})
 	require.NoError(t, err)
 
 	tb.bot.checkFeeds(t.Context())
@@ -296,10 +296,55 @@ func TestCheckFeedsYouTubeMarksShortsSeen(t *testing.T) {
 	}
 }
 
+func TestCheckFeedsAppliesExcludeFilter(t *testing.T) {
+	tb := newTestFeedBot(t)
+	feedURL := tb.ts.URL + "/feed.xml"
+
+	_, err := tb.store.AddSub(100, &store.Sub{
+		URL:     feedURL,
+		Format:  "link",
+		Exclude: []string{"two"},
+	})
+	require.NoError(t, err)
+
+	tb.bot.checkFeeds(t.Context())
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "https://example.com/1")
+
+	// Filtered item still marked seen — second poll sends nothing.
+	tb.resetSent()
+	tb.bot.checkFeeds(t.Context())
+	assert.Empty(t, tb.getSent())
+
+	seen, err := tb.store.IsSeen(feedURL, "guid-2")
+	require.NoError(t, err)
+	assert.True(t, seen, "filtered guid should be marked seen")
+}
+
+func TestCheckFeedsAppliesIncludeFilter(t *testing.T) {
+	tb := newTestFeedBot(t)
+	feedURL := tb.ts.URL + "/feed.xml"
+
+	_, err := tb.store.AddSub(100, &store.Sub{
+		URL:     feedURL,
+		Format:  "link",
+		Include: []string{"two"},
+	})
+	require.NoError(t, err)
+
+	tb.bot.checkFeeds(t.Context())
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "https://example.com/2")
+}
+
 func TestCheckFeedsPWReddit(t *testing.T) {
 	tb := newTestFeedBot(t)
 
-	err := tb.store.AddSub(100, store.Sub{URL: tb.ts.URL + "/reddit.atom", Format: "pw"})
+	_, err := tb.store.AddSub(100, &store.Sub{URL: tb.ts.URL + "/reddit.atom", Format: "pw"})
 	require.NoError(t, err)
 
 	tb.bot.checkFeeds(t.Context())

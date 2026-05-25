@@ -29,19 +29,27 @@ docker pull ghcr.io/deadnews/rss2tg
 
 ## Commands
 
-| Command                                | Description                     |
-| -------------------------------------- | ------------------------------- |
-| `/sub <url> [link\|pw\|text] [shorts]` | Subscribe current chat to feed  |
-| `/unsub <url>`                         | Unsubscribe from feed           |
-| `/list`                                | List subscriptions              |
-| `/format <link\|pw\|text>`             | Change format for all chat subs |
-| `/help`                                | Show available commands         |
+| Command                                                                | Description                         |
+| ---------------------------------------------------------------------- | ----------------------------------- |
+| `/sub <url> [link\|pw\|text] [shorts] [exclude:w1,w2] [include:w1,w2]` | Subscribe current chat to feed      |
+| `/unsub <url>`                                                         | Unsubscribe from feed               |
+| `/list`                                                                | List subscriptions (copy-pasteable) |
+| `/format <link\|pw\|text>`                                             | Change format for all chat subs     |
+| `/help`                                                                | Show available commands             |
 
 New subscribers receive the 3 latest entries; the rest are marked seen.
 
-YouTube channel URLs (`@handle`, `/channel/UC…`, `/c/`, `/user/`) auto-resolve to
-their Atom feed on `/sub`. Shorts are filtered by default — append `shorts` to
-include them.
+YouTube channel URLs auto-resolve to their Atom feed on `/sub`.
+Shorts are filtered by default — append `shorts` to include them.
+
+Title filters match whole words case-insensitively. Exclude wins over include.
+Re-running `/sub` for an existing URL replaces its options (`/list` prints each
+sub as the exact `/sub` line to copy, edit, and resend).
+
+```sh
+/sub https://example.com/feed.xml pw exclude:crypto,ai
+/sub https://reddit.com/r/programming/.rss link include:go,rust
+```
 
 ## Message Formats
 

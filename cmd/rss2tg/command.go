@@ -30,13 +30,15 @@ var validFormats = map[string]bool{
 
 const helpText = `<b>Available commands:</b>
 
-/sub &lt;url&gt; [link|pw|text] [shorts] — subscribe to feed
+/sub &lt;url&gt; [link|pw|text] [shorts] [exclude:w1,w2] [include:w1,w2] — subscribe to feed
 /unsub &lt;url&gt; — unsubscribe from feed
 /list — list subscriptions
 /format &lt;link|pw|text&gt; — change format for all subs
 /help — show this message
 
-YouTube channel URLs (@handle, /channel/UC…, /c/, /user/) are auto-resolved to their Atom feed. YouTube Shorts are filtered by default; pass <code>shorts</code> to include them.`
+YouTube channel URLs are auto-resolved to their Atom feed. YouTube Shorts are filtered by default; pass <code>shorts</code> to include them.
+
+Filters match whole words in the title (case-insensitive). Exclude wins over include.`
 
 // handleCommand dispatches a bot command from an authorized user.
 func (bot *Bot) handleCommand(ctx context.Context, msg *telegram.Message) {
@@ -72,25 +74,50 @@ func (bot *Bot) handleCommand(ctx context.Context, msg *telegram.Message) {
 }
 
 const (
-	subUsage    = "Usage: /sub &lt;url&gt; [link|pw|text] [shorts]"
+	subUsage    = "Usage: /sub &lt;url&gt; [link|pw|text] [shorts] [exclude:w1,w2] [include:w1,w2]"
 	unsubUsage  = "Usage: /unsub &lt;url&gt;"
 	formatUsage = "Usage: /format &lt;link|pw|text&gt;"
 )
 
-// parseSubArgs parses optional format and `shorts` flag from /sub args after the URL.
-func parseSubArgs(args []string) (format string, shorts, ok bool) {
-	format = formatLink
+const (
+	prefixExclude = "exclude:"
+	prefixInclude = "include:"
+)
+
+// parsedSubArgs holds optional /sub flags after the URL.
+type parsedSubArgs struct {
+	format  string
+	shorts  bool
+	exclude []string
+	include []string
+}
+
+// parseSubArgs parses optional /sub flags in any order.
+func parseSubArgs(args []string) (parsedSubArgs, bool) {
+	out := parsedSubArgs{format: formatLink}
 	for _, arg := range args {
 		switch {
 		case arg == "shorts":
-			shorts = true
+			out.shorts = true
 		case validFormats[arg]:
-			format = arg
+			out.format = arg
+		case strings.HasPrefix(arg, prefixExclude):
+			words, ok := parseFilterArg(arg[len(prefixExclude):])
+			if !ok {
+				return parsedSubArgs{}, false
+			}
+			out.exclude = words
+		case strings.HasPrefix(arg, prefixInclude):
+			words, ok := parseFilterArg(arg[len(prefixInclude):])
+			if !ok {
+				return parsedSubArgs{}, false
+			}
+			out.include = words
 		default:
-			return "", false, false
+			return parsedSubArgs{}, false
 		}
 	}
-	return format, shorts, true
+	return out, true
 }
 
 func (bot *Bot) handleSub(ctx context.Context, chatID int64, args []string) {
@@ -99,7 +126,7 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, args []string) {
 		return
 	}
 
-	format, shorts, ok := parseSubArgs(args[1:])
+	opts, ok := parseSubArgs(args[1:])
 	if !ok {
 		bot.reply(ctx, chatID, subUsage)
 		return
@@ -119,15 +146,33 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, args []string) {
 		return
 	}
 
-	sub := store.Sub{URL: url, Title: feed.Title, Format: format, Shorts: shorts}
-	if err := bot.store.AddSub(chatID, sub); err != nil {
+	sub := store.Sub{
+		URL:     url,
+		Title:   feed.Title,
+		Format:  opts.format,
+		Shorts:  opts.shorts,
+		Exclude: opts.exclude,
+		Include: opts.include,
+	}
+	existed, err := bot.store.AddSub(chatID, &sub)
+	if err != nil {
 		slog.Error("Failed to add subscription", "error", err)
 		bot.reply(ctx, chatID, "Failed to subscribe.")
 		return
 	}
 
-	bot.reply(ctx, chatID, fmt.Sprintf("Subscribed to %s (%s)", url, format))
-	bot.deliverInitialEntries(ctx, url, feed, []store.ChatFeed{{ChatID: chatID, Format: format, Shorts: shorts}})
+	verb := "Subscribed to"
+	if existed {
+		verb = "Updated subscription for"
+	}
+	bot.reply(ctx, chatID, fmt.Sprintf("%s %s (%s)", verb, url, opts.format))
+	bot.deliverInitialEntries(ctx, url, feed, []store.ChatFeed{{
+		ChatID:  chatID,
+		Format:  opts.format,
+		Shorts:  opts.shorts,
+		Exclude: opts.exclude,
+		Include: opts.include,
+	}})
 }
 
 // deliverInitialEntries delivers the latest initialSendLimit entries
@@ -182,23 +227,43 @@ func (bot *Bot) handleList(ctx context.Context, chatID int64) {
 	}
 
 	var b strings.Builder
-	for _, sub := range subs {
-		b.WriteString("• ")
+	for i := range subs {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		sub := &subs[i]
 		if sub.Title != "" {
 			b.WriteString("<b>")
 			b.WriteString(html.EscapeString(sub.Title))
-			b.WriteString("</b> — ")
+			b.WriteString("</b>\n")
 		}
-		b.WriteString(sub.URL)
-		b.WriteString(" [")
-		b.WriteString(sub.Format)
-		if sub.Shorts {
-			b.WriteString(",shorts")
-		}
-		b.WriteString("]\n")
+		b.WriteString("<code>")
+		b.WriteString(html.EscapeString(formatSubCommand(sub)))
+		b.WriteString("</code>\n")
 	}
 
 	bot.reply(ctx, chatID, b.String())
+}
+
+// formatSubCommand renders a sub as the /sub line that recreates it.
+func formatSubCommand(sub *store.Sub) string {
+	var b strings.Builder
+	b.WriteString("/sub ")
+	b.WriteString(sub.URL)
+	b.WriteString(" ")
+	b.WriteString(sub.Format)
+	if sub.Shorts {
+		b.WriteString(" shorts")
+	}
+	if len(sub.Exclude) > 0 {
+		b.WriteString(" exclude:")
+		b.WriteString(strings.Join(sub.Exclude, ","))
+	}
+	if len(sub.Include) > 0 {
+		b.WriteString(" include:")
+		b.WriteString(strings.Join(sub.Include, ","))
+	}
+	return b.String()
 }
 
 func (bot *Bot) handleFormat(ctx context.Context, chatID int64, args []string) {

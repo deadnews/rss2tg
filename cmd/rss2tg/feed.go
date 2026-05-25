@@ -48,8 +48,12 @@ func (bot *Bot) deliverNew(ctx context.Context, feedURL string, feed *gofeed.Fee
 
 		isShort := youtube.IsShort(item.Link)
 		var attempted, delivered bool
-		for _, chat := range chats {
+		for i := range chats {
+			chat := &chats[i]
 			if isShort && !chat.Shorts {
+				continue
+			}
+			if !allow(item.Title, chat.Include, chat.Exclude) {
 				continue
 			}
 			attempted = true
@@ -73,7 +77,7 @@ func (bot *Bot) deliverNew(ctx context.Context, feedURL string, feed *gofeed.Fee
 	}
 }
 
-func (bot *Bot) sendEntry(ctx context.Context, item *gofeed.Item, feedTitle, feedLink string, chat store.ChatFeed) error {
+func (bot *Bot) sendEntry(ctx context.Context, item *gofeed.Item, feedTitle, feedLink string, chat *store.ChatFeed) error {
 	var err error
 	switch chat.Format {
 	case formatPreview:

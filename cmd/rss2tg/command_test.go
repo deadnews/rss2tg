@@ -179,8 +179,7 @@ func TestHandleListShowsTitle(t *testing.T) {
 	require.GreaterOrEqual(t, len(*sent), 2)
 	listMsg := (*sent)[len(*sent)-1].Text
 	assert.Contains(t, listMsg, "<b>Command Test Feed</b>")
-	assert.Contains(t, listMsg, feedURL)
-	assert.Contains(t, listMsg, "[link]")
+	assert.Contains(t, listMsg, "<code>/sub "+feedURL+" link</code>")
 }
 
 func TestHandleSubWithFormat(t *testing.T) {
@@ -252,7 +251,7 @@ func TestHandleSubInvalidFeed(t *testing.T) {
 func TestHandleUnsub(t *testing.T) {
 	bot, sent, _ := testBot(t)
 
-	err := bot.store.AddSub(100, store.Sub{URL: "https://example.com/feed.xml", Format: "link"})
+	_, err := bot.store.AddSub(100, &store.Sub{URL: "https://example.com/feed.xml", Format: "link"})
 	require.NoError(t, err)
 
 	bot.handleCommand(t.Context(), &telegram.Message{
@@ -294,9 +293,9 @@ func TestHandleUnsubNoArgs(t *testing.T) {
 func TestHandleList(t *testing.T) {
 	bot, sent, _ := testBot(t)
 
-	err := bot.store.AddSub(100, store.Sub{URL: "https://a.com/feed", Format: "link"})
+	_, err := bot.store.AddSub(100, &store.Sub{URL: "https://a.com/feed", Format: "link"})
 	require.NoError(t, err)
-	err = bot.store.AddSub(100, store.Sub{URL: "https://b.com/feed", Format: "pw"})
+	_, err = bot.store.AddSub(100, &store.Sub{URL: "https://b.com/feed", Format: "pw"})
 	require.NoError(t, err)
 
 	bot.handleCommand(t.Context(), &telegram.Message{
@@ -326,7 +325,7 @@ func TestHandleListEmpty(t *testing.T) {
 func TestHandleFormat(t *testing.T) {
 	bot, sent, _ := testBot(t)
 
-	err := bot.store.AddSub(100, store.Sub{URL: "https://a.com/feed", Format: "link"})
+	_, err := bot.store.AddSub(100, &store.Sub{URL: "https://a.com/feed", Format: "link"})
 	require.NoError(t, err)
 
 	bot.handleCommand(t.Context(), &telegram.Message{
@@ -367,4 +366,117 @@ func TestHandleFormatInvalidArg(t *testing.T) {
 
 	require.Len(t, *sent, 1)
 	assert.Contains(t, (*sent)[0].Text, "Usage")
+}
+
+func TestParseSubArgs(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want parsedSubArgs
+		ok   bool
+	}{
+		{
+			name: "empty defaults to link",
+			args: nil,
+			want: parsedSubArgs{format: formatLink},
+			ok:   true,
+		},
+		{
+			name: "format only",
+			args: []string{"pw"},
+			want: parsedSubArgs{format: "pw"},
+			ok:   true,
+		},
+		{
+			name: "all options any order",
+			args: []string{"include:go,rust", "shorts", "exclude:Crypto,AI", "pw"},
+			want: parsedSubArgs{
+				format:  "pw",
+				shorts:  true,
+				exclude: []string{"crypto", "ai"},
+				include: []string{"go", "rust"},
+			},
+			ok: true,
+		},
+		{
+			name: "invalid filter rejected",
+			args: []string{"exclude:c++"},
+			ok:   false,
+		},
+		{
+			name: "unknown token rejected",
+			args: []string{"nope"},
+			ok:   false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := parseSubArgs(tc.args)
+			assert.Equal(t, tc.ok, ok)
+			if ok {
+				assert.Equal(t, tc.want, got)
+			}
+		})
+	}
+}
+
+func TestHandleSubWithFilters(t *testing.T) {
+	bot, sent, baseURL := testBot(t)
+	feedURL := baseURL + "/feed.xml"
+
+	bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 100},
+		Text: "/sub " + feedURL + " pw exclude:crypto,ai include:go",
+	})
+
+	require.Len(t, *sent, 1)
+	assert.Contains(t, (*sent)[0].Text, "Subscribed")
+
+	subs, err := bot.store.ListSubs(100)
+	require.NoError(t, err)
+	require.Len(t, subs, 1)
+	assert.Equal(t, []string{"crypto", "ai"}, subs[0].Exclude)
+	assert.Equal(t, []string{"go"}, subs[0].Include)
+}
+
+func TestHandleSubResubReplies(t *testing.T) {
+	bot, sent, baseURL := testBot(t)
+	feedURL := baseURL + "/feed.xml"
+
+	for range 2 {
+		bot.handleCommand(t.Context(), &telegram.Message{
+			From: &telegram.User{ID: 42},
+			Chat: telegram.Chat{ID: 100},
+			Text: "/sub " + feedURL,
+		})
+	}
+
+	require.GreaterOrEqual(t, len(*sent), 2)
+	assert.Contains(t, (*sent)[0].Text, "Subscribed to")
+	assert.Contains(t, (*sent)[1].Text, "Updated subscription for")
+}
+
+func TestHandleListRendersFilters(t *testing.T) {
+	bot, sent, _ := testBot(t)
+
+	_, err := bot.store.AddSub(100, &store.Sub{
+		URL:     "https://a.com/feed",
+		Title:   "Feed A",
+		Format:  "pw",
+		Shorts:  true,
+		Exclude: []string{"crypto"},
+		Include: []string{"go", "rust"},
+	})
+	require.NoError(t, err)
+
+	bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 100},
+		Text: "/list",
+	})
+
+	require.Len(t, *sent, 1)
+	assert.Contains(t, (*sent)[0].Text,
+		"<code>/sub https://a.com/feed pw shorts exclude:crypto include:go,rust</code>")
 }

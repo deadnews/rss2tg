@@ -24,10 +24,12 @@ type Store struct {
 
 // Sub represents a feed subscription.
 type Sub struct {
-	URL    string `json:"-"`
-	Title  string `json:"title,omitempty"`
-	Format string `json:"format"`
-	Shorts bool   `json:"shorts,omitempty"`
+	URL     string   `json:"-"`
+	Title   string   `json:"title,omitempty"`
+	Format  string   `json:"format"`
+	Shorts  bool     `json:"shorts,omitempty"`
+	Exclude []string `json:"exclude,omitempty"`
+	Include []string `json:"include,omitempty"`
 }
 
 func decodeSub(url string, v []byte) (Sub, error) {
@@ -70,23 +72,25 @@ func (s *Store) Close() error {
 	return nil
 }
 
-// AddSub subscribes a chat to a feed.
-func (s *Store) AddSub(chatID int64, sub Sub) error {
+// AddSub subscribes a chat to a feed. Returns whether the URL was already subscribed.
+func (s *Store) AddSub(chatID int64, sub *Sub) (bool, error) {
 	val, err := json.Marshal(sub)
 	if err != nil {
-		return fmt.Errorf("encoding sub: %w", err)
+		return false, fmt.Errorf("encoding sub: %w", err)
 	}
+	var existed bool
 	err = s.db.Update(func(tx *bolt.Tx) error {
 		chat, err := tx.Bucket(bucketSubs).CreateBucketIfNotExists(chatKey(chatID))
 		if err != nil {
 			return fmt.Errorf("creating chat bucket: %w", err)
 		}
+		existed = chat.Get([]byte(sub.URL)) != nil
 		return chat.Put([]byte(sub.URL), val)
 	})
 	if err != nil {
-		return fmt.Errorf("adding subscription: %w", err)
+		return false, fmt.Errorf("adding subscription: %w", err)
 	}
-	return nil
+	return existed, nil
 }
 
 // RemoveSub unsubscribes a chat from a feed URL. Returns true if it existed.
@@ -177,9 +181,11 @@ func (s *Store) SetFormat(chatID int64, format string) (int, error) {
 
 // ChatFeed pairs a chat ID with its subscription options for a given feed.
 type ChatFeed struct {
-	ChatID int64
-	Format string
-	Shorts bool
+	ChatID  int64
+	Format  string
+	Shorts  bool
+	Exclude []string
+	Include []string
 }
 
 // AllFeeds returns a map of feed URL → list of subscribed chats with their options.
@@ -200,9 +206,11 @@ func (s *Store) AllFeeds() (map[string][]ChatFeed, error) {
 					return err
 				}
 				feeds[sub.URL] = append(feeds[sub.URL], ChatFeed{
-					ChatID: chatID,
-					Format: sub.Format,
-					Shorts: sub.Shorts,
+					ChatID:  chatID,
+					Format:  sub.Format,
+					Shorts:  sub.Shorts,
+					Exclude: sub.Exclude,
+					Include: sub.Include,
 				})
 				return nil
 			})
