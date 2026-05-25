@@ -53,10 +53,11 @@ sub as the exact `/sub` line to copy, edit, and resend).
 
 ## Message Formats
 
-`link` (default) — clickable title with link preview:
+`link` (default) — bold title + URL:
 
 ```html
-<a href="URL"><b>Post Title</b></a>
+<b>Post Title</b>
+URL
 ```
 
 `pw` — photo + title + excerpt + attribution (falls back to text if no image):

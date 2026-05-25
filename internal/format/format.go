@@ -19,10 +19,20 @@ var (
 	reRedditPreviewImg = regexp.MustCompile(`^https?://preview\.redd\.it/([^?]+)`)
 )
 
-// Link formats an entry as a clickable title link.
+// Link formats an entry as a bold title + URL.
 func Link(item *gofeed.Item) string {
 	var b strings.Builder
-	writeBoldTitle(&b, itemTitle(item), item.Link)
+	if item.Title != "" {
+		b.WriteString("<b>")
+		b.WriteString(html.EscapeString(item.Title))
+		b.WriteString("</b>")
+		if item.Link != "" {
+			b.WriteString("\n")
+			b.WriteString(html.EscapeString(item.Link))
+		}
+		return b.String()
+	}
+	b.WriteString(html.EscapeString(item.Link))
 	return b.String()
 }
 

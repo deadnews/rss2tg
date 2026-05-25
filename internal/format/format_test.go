@@ -12,7 +12,7 @@ func TestLink(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		item := &gofeed.Item{Title: "Hello World", Link: "https://example.com/post"}
 		got := Link(item)
-		assert.Equal(t, `<a href="https://example.com/post"><b>Hello World</b></a>`, got)
+		assert.Equal(t, "<b>Hello World</b>\nhttps://example.com/post", got)
 	})
 
 	t.Run("escapes HTML in title", func(t *testing.T) {
@@ -26,7 +26,7 @@ func TestLink(t *testing.T) {
 	t.Run("falls back to link when no title", func(t *testing.T) {
 		item := &gofeed.Item{Link: "https://example.com/page"}
 		got := Link(item)
-		assert.Contains(t, got, "https://example.com/page")
+		assert.Equal(t, "https://example.com/page", got)
 	})
 }
 
