@@ -22,22 +22,21 @@ var (
 // Link formats an entry as a bold title + URL;
 // meta inserts between them when non-empty.
 func Link(item *gofeed.Item, meta string) string {
-	var b strings.Builder
-	if item.Title != "" {
-		b.WriteString("<b>")
-		b.WriteString(html.EscapeString(item.Title))
-		b.WriteString("</b>")
-		if meta != "" {
-			b.WriteString("\n")
-			b.WriteString(meta)
-		}
-		if item.Link != "" {
-			b.WriteString("\n")
-			b.WriteString(html.EscapeString(item.Link))
-		}
-		return b.String()
+	if item.Title == "" {
+		return html.EscapeString(item.Link)
 	}
-	b.WriteString(html.EscapeString(item.Link))
+	var b strings.Builder
+	b.WriteString("<b>")
+	b.WriteString(html.EscapeString(item.Title))
+	b.WriteString("</b>")
+	if meta != "" {
+		b.WriteString("\n")
+		b.WriteString(meta)
+	}
+	if item.Link != "" {
+		b.WriteString("\n")
+		b.WriteString(html.EscapeString(item.Link))
+	}
 	return b.String()
 }
 

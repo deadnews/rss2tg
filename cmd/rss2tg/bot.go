@@ -13,10 +13,7 @@ import (
 	"github.com/deadnews/rss2tg/internal/telegram"
 )
 
-const (
-	cleanSeenEvery = 24 * time.Hour
-	pollBackoff    = 5 * time.Second
-)
+const pollBackoff = 5 * time.Second
 
 // Bot orchestrates feed checks and Telegram updates.
 type Bot struct {
@@ -90,8 +87,6 @@ func (bot *Bot) checkFeedsLoop(ctx context.Context) {
 
 	feedTicker := time.NewTicker(bot.cfg.Interval)
 	defer feedTicker.Stop()
-	cleanTicker := time.NewTicker(cleanSeenEvery)
-	defer cleanTicker.Stop()
 
 	for {
 		select {
@@ -100,10 +95,6 @@ func (bot *Bot) checkFeedsLoop(ctx context.Context) {
 			return
 		case <-feedTicker.C:
 			bot.checkFeeds(ctx)
-		case <-cleanTicker.C:
-			if err := bot.store.CleanSeen(); err != nil {
-				slog.Error("Failed to clean seen entries", "error", err)
-			}
 		}
 	}
 }

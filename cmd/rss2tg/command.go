@@ -166,13 +166,7 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, args []string) {
 		verb = "Updated subscription for"
 	}
 	bot.reply(ctx, chatID, fmt.Sprintf("%s %s (%s)", verb, url, sub.Format))
-	bot.deliverInitialEntries(ctx, url, feed, []store.ChatFeed{{
-		ChatID:  chatID,
-		Format:  sub.Format,
-		Shorts:  sub.Shorts,
-		Exclude: sub.Exclude,
-		Include: sub.Include,
-	}})
+	bot.deliverInitialEntries(ctx, url, feed, []store.ChatFeed{sub.ChatFeed(chatID)})
 }
 
 // deliverInitialEntries delivers the latest initialSendLimit entries

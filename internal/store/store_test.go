@@ -188,38 +188,47 @@ func TestSeenTracking(t *testing.T) {
 	assert.False(t, seen)
 }
 
-func TestCleanSeenKeepsRecent(t *testing.T) {
+func TestTrimSeenUnderCapKeepsAll(t *testing.T) {
 	s := testStore(t)
+	feedURL := "https://a.com/feed"
 
-	err := s.MarkSeen("https://a.com/feed", "recent-guid")
-	require.NoError(t, err)
+	require.NoError(t, s.MarkSeen(feedURL, "guid-1"))
+	require.NoError(t, s.MarkSeen(feedURL, "guid-2"))
 
-	err = s.CleanSeen()
-	require.NoError(t, err)
+	require.NoError(t, s.TrimSeen(feedURL, 5))
 
-	seen, err := s.IsSeen("https://a.com/feed", "recent-guid")
-	require.NoError(t, err)
-	assert.True(t, seen)
+	for _, guid := range []string{"guid-1", "guid-2"} {
+		seen, err := s.IsSeen(feedURL, guid)
+		require.NoError(t, err)
+		assert.True(t, seen, guid)
+	}
 }
 
-func TestCleanSeenRemovesOld(t *testing.T) {
+func TestTrimSeenEvictsOldestByMarkTime(t *testing.T) {
 	s := testStore(t)
-
-	// Write a stale entry directly with an aged timestamp.
 	feedURL := "https://a.com/feed"
-	require.NoError(t, s.db.Update(func(tx *bolt.Tx) error {
-		feed, err := tx.Bucket(bucketSeen).CreateBucketIfNotExists([]byte(feedURL))
-		if err != nil {
-			return fmt.Errorf("create bucket: %w", err)
-		}
-		ts := make([]byte, 8)
-		binary.BigEndian.PutUint64(ts, uint64(time.Now().Add(-2*seenRetention).Unix()))
-		return feed.Put([]byte("old-guid"), ts)
-	}))
 
-	require.NoError(t, s.CleanSeen())
+	// Write entries with explicit ascending mark times; "old" is the oldest.
+	for i, guid := range []string{"old", "mid", "new"} {
+		require.NoError(t, s.db.Update(func(tx *bolt.Tx) error {
+			feed, err := tx.Bucket(bucketSeen).CreateBucketIfNotExists([]byte(feedURL))
+			if err != nil {
+				return fmt.Errorf("create bucket: %w", err)
+			}
+			ts := make([]byte, 8)
+			binary.BigEndian.PutUint64(ts, uint64(time.Now().Add(time.Duration(i)*time.Second).Unix()))
+			return feed.Put([]byte(guid), ts)
+		}))
+	}
 
-	seen, err := s.IsSeen(feedURL, "old-guid")
+	require.NoError(t, s.TrimSeen(feedURL, 2))
+
+	seen, err := s.IsSeen(feedURL, "old")
 	require.NoError(t, err)
 	assert.False(t, seen)
+	for _, guid := range []string{"mid", "new"} {
+		seen, err := s.IsSeen(feedURL, guid)
+		require.NoError(t, err)
+		assert.True(t, seen, guid)
+	}
 }

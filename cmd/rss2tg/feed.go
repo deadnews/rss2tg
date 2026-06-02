@@ -28,6 +28,10 @@ func (bot *Bot) checkFeeds(ctx context.Context) {
 			continue
 		}
 		bot.deliverNew(ctx, url, feed, chats)
+		// Cap the seen set at twice the feed length so every served entry stays remembered.
+		if err := bot.store.TrimSeen(url, max(2*len(feed.Items), 100)); err != nil {
+			slog.Error("Failed to trim seen", "url", url, "error", err)
+		}
 	}
 }
 

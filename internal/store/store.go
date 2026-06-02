@@ -2,15 +2,16 @@
 package store
 
 import (
+	"bytes"
+	"cmp"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	bolt "go.etcd.io/bbolt"
 )
-
-const seenRetention = 7 * 24 * time.Hour
 
 var (
 	bucketSubs = []byte("subs")
@@ -38,6 +39,23 @@ func decodeSub(url string, v []byte) (Sub, error) {
 		return Sub{}, fmt.Errorf("decoding sub %q: %w", url, err)
 	}
 	return sub, nil
+}
+
+// collectSubs decodes every subscription in a chat bucket.
+func collectSubs(chat *bolt.Bucket) ([]Sub, error) {
+	var subs []Sub
+	err := chat.ForEach(func(k, v []byte) error {
+		sub, err := decodeSub(string(k), v)
+		if err != nil {
+			return err
+		}
+		subs = append(subs, sub)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("iterating subscriptions: %w", err)
+	}
+	return subs, nil
 }
 
 // New opens a bbolt database and creates top-level buckets.
@@ -122,14 +140,9 @@ func (s *Store) ListSubs(chatID int64) ([]Sub, error) {
 		if chat == nil {
 			return nil
 		}
-		return chat.ForEach(func(k, v []byte) error {
-			sub, err := decodeSub(string(k), v)
-			if err != nil {
-				return err
-			}
-			subs = append(subs, sub)
-			return nil
-		})
+		var err error
+		subs, err = collectSubs(chat)
+		return err
 	})
 	if err != nil {
 		return nil, fmt.Errorf("listing subscriptions: %w", err)
@@ -147,16 +160,8 @@ func (s *Store) SetFormat(chatID int64, format string) (int, error) {
 		if chat == nil {
 			return nil
 		}
-		// bbolt: ForEach must not modify the bucket; collect entries first.
-		var subs []Sub
-		if err := chat.ForEach(func(k, v []byte) error {
-			sub, err := decodeSub(string(k), v)
-			if err != nil {
-				return err
-			}
-			subs = append(subs, sub)
-			return nil
-		}); err != nil {
+		subs, err := collectSubs(chat)
+		if err != nil {
 			return fmt.Errorf("collecting subscriptions: %w", err)
 		}
 		count = len(subs)
@@ -188,6 +193,17 @@ type ChatFeed struct {
 	Include []string
 }
 
+// ChatFeed projects a Sub into the delivery options for the given chat.
+func (sub *Sub) ChatFeed(chatID int64) ChatFeed {
+	return ChatFeed{
+		ChatID:  chatID,
+		Format:  sub.Format,
+		Shorts:  sub.Shorts,
+		Exclude: sub.Exclude,
+		Include: sub.Include,
+	}
+}
+
 // AllFeeds returns a map of feed URL → list of subscribed chats with their options.
 func (s *Store) AllFeeds() (map[string][]ChatFeed, error) {
 	feeds := make(map[string][]ChatFeed)
@@ -205,13 +221,7 @@ func (s *Store) AllFeeds() (map[string][]ChatFeed, error) {
 				if err != nil {
 					return err
 				}
-				feeds[sub.URL] = append(feeds[sub.URL], ChatFeed{
-					ChatID:  chatID,
-					Format:  sub.Format,
-					Shorts:  sub.Shorts,
-					Exclude: sub.Exclude,
-					Include: sub.Include,
-				})
+				feeds[sub.URL] = append(feeds[sub.URL], sub.ChatFeed(chatID))
 				return nil
 			})
 		})
@@ -242,7 +252,7 @@ func (s *Store) IsSeen(feedURL, guid string) (bool, error) {
 	return seen, nil
 }
 
-// MarkSeen marks an entry GUID as seen for a feed URL with current timestamp.
+// MarkSeen marks an entry GUID as seen.
 func (s *Store) MarkSeen(feedURL, guid string) error {
 	err := s.db.Update(func(tx *bolt.Tx) error {
 		feed, err := tx.Bucket(bucketSeen).CreateBucketIfNotExists([]byte(feedURL))
@@ -259,38 +269,39 @@ func (s *Store) MarkSeen(feedURL, guid string) error {
 	return nil
 }
 
-// CleanSeen removes seen entries older than seenRetention.
-func (s *Store) CleanSeen() error {
-	cutoff := uint64(time.Now().Add(-seenRetention).Unix()) //nolint:gosec // unix timestamps are always positive
-
+// TrimSeen keeps a feed's newest keep entries by mark time.
+func (s *Store) TrimSeen(feedURL string, keep int) error {
 	err := s.db.Update(func(tx *bolt.Tx) error {
-		seen := tx.Bucket(bucketSeen)
-		return seen.ForEach(func(feedKey, _ []byte) error {
-			feed := seen.Bucket(feedKey)
-			if feed == nil {
-				return nil
-			}
-
-			var toDelete [][]byte
-			if err := feed.ForEach(func(k, v []byte) error {
-				if len(v) == 8 && binary.BigEndian.Uint64(v) < cutoff {
-					toDelete = append(toDelete, k)
-				}
-				return nil
-			}); err != nil {
-				return fmt.Errorf("iterating seen entries: %w", err)
-			}
-
-			for _, k := range toDelete {
-				if err := feed.Delete(k); err != nil {
-					return fmt.Errorf("deleting seen entry: %w", err)
-				}
-			}
+		feed := tx.Bucket(bucketSeen).Bucket([]byte(feedURL))
+		if feed == nil {
 			return nil
-		})
+		}
+
+		type entry struct {
+			ts  uint64
+			key []byte
+		}
+		var entries []entry
+		if err := feed.ForEach(func(k, v []byte) error {
+			entries = append(entries, entry{binary.BigEndian.Uint64(v), bytes.Clone(k)})
+			return nil
+		}); err != nil {
+			return fmt.Errorf("iterating seen entries: %w", err)
+		}
+		if len(entries) <= keep {
+			return nil
+		}
+
+		slices.SortFunc(entries, func(a, b entry) int { return cmp.Compare(a.ts, b.ts) })
+		for _, e := range entries[:len(entries)-keep] {
+			if err := feed.Delete(e.key); err != nil {
+				return fmt.Errorf("deleting seen entry: %w", err)
+			}
+		}
+		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("cleaning seen entries: %w", err)
+		return fmt.Errorf("trimming seen entries: %w", err)
 	}
 	return nil
 }
