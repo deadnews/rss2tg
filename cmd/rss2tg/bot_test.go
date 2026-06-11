@@ -28,7 +28,7 @@ func TestNewBot(t *testing.T) {
 	bot := NewBot(cfg, tg, st)
 
 	assert.NotNil(t, bot)
-	assert.NotNil(t, bot.parser)
+	assert.NotNil(t, bot.feedClient)
 	assert.Equal(t, cfg, bot.cfg)
 }
 

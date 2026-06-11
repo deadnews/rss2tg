@@ -27,14 +27,13 @@ func TestGetMe(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(Response[User]{
 				OK:     true,
-				Result: User{ID: 123, IsBot: true, Username: "testbot"},
+				Result: User{ID: 123, Username: "testbot"},
 			})
 		})
 
 		user, err := c.GetMe(t.Context())
 		require.NoError(t, err)
 		assert.Equal(t, int64(123), user.ID)
-		assert.True(t, user.IsBot)
 		assert.Equal(t, "testbot", user.Username)
 	})
 
@@ -65,10 +64,9 @@ func TestGetUpdates(t *testing.T) {
 				OK: true,
 				Result: []Update{
 					{UpdateID: 1, Message: &Message{
-						MessageID: 10,
-						From:      &User{ID: 42},
-						Chat:      Chat{ID: 42},
-						Text:      "/help",
+						From: &User{ID: 42},
+						Chat: Chat{ID: 42},
+						Text: "/help",
 					}},
 				},
 			})

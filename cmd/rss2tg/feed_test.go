@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/deadnews/rss2tg/internal/format"
 	"github.com/deadnews/rss2tg/internal/store"
 	"github.com/deadnews/rss2tg/internal/telegram"
 )
@@ -101,12 +102,7 @@ func newTestBotEnv(t *testing.T) *testBotEnv {
 	tg := telegram.NewClient("test-token")
 	tg.BaseURL = ts.URL
 
-	bot := &Bot{
-		cfg:    &Config{Manager: 42},
-		tg:     tg,
-		store:  st,
-		parser: gofeed.NewParser(),
-	}
+	bot := NewBot(&Config{Manager: 42}, tg, st)
 
 	return &testBotEnv{bot: bot, store: st, mu: &mu, sent: &sent, ts: ts, mux: mux}
 }
@@ -188,7 +184,7 @@ func TestSubscribeFeedSendsOnlyLatest(t *testing.T) {
 	})
 
 	feedURL := tb.ts.URL + "/seed.xml"
-	feed, err := tb.bot.parser.ParseURLWithContext(feedURL, t.Context())
+	feed, err := tb.bot.parseFeed(t.Context(), feedURL)
 	require.NoError(t, err)
 	tb.bot.deliverInitialEntries(t.Context(), feedURL, feed, []store.ChatFeed{{ChatID: 100, Format: "link"}})
 
@@ -240,6 +236,33 @@ func TestCheckFeedsTextFormat(t *testing.T) {
 	assert.Contains(t, text, "3. ")
 	assert.Contains(t, text, "Artemis II safely splashes down")
 	assert.Contains(t, text, "\n")
+}
+
+func TestCheckFeedsTruncatesLongEntry(t *testing.T) {
+	rss := `<?xml version="1.0"?>
+<rss version="2.0"><channel><title>T</title>
+<item><title>Long</title><link>https://e.com/1</link><guid>long-1</guid>
+<description>` + strings.Repeat("word ", 2000) + `</description></item>
+</channel></rss>`
+
+	tb := newTestFeedBot(t)
+	tb.serveXML("/long.xml", []byte(rss))
+	feedURL := tb.ts.URL + "/long.xml"
+
+	_, err := tb.store.AddSub(100, &store.Sub{URL: feedURL, Format: "text"})
+	require.NoError(t, err)
+
+	tb.bot.checkFeeds(t.Context())
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	// Within the limit: re-truncating is a no-op.
+	assert.Equal(t, sent[0].Text, format.TruncateHTML(sent[0].Text, format.MessageLimit))
+	assert.Contains(t, sent[0].Text, "…")
+
+	seen, err := tb.store.IsSeen(feedURL, "long-1")
+	require.NoError(t, err)
+	assert.True(t, seen, "truncated entry should be delivered and marked seen")
 }
 
 func TestCheckFeedsYouTubeFiltersShorts(t *testing.T) {

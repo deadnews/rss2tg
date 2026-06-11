@@ -9,6 +9,7 @@ import (
 
 	"github.com/mmcdole/gofeed"
 
+	"github.com/deadnews/rss2tg/internal/format"
 	"github.com/deadnews/rss2tg/internal/store"
 	"github.com/deadnews/rss2tg/internal/telegram"
 	"github.com/deadnews/rss2tg/internal/youtube"
@@ -139,7 +140,7 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, args []string) {
 		return
 	}
 
-	feed, err := bot.parser.ParseURLWithContext(url, ctx)
+	feed, err := bot.parseFeed(ctx, url)
 	if err != nil {
 		slog.Error("Failed to parse feed", "url", url, "error", err)
 		bot.reply(ctx, chatID, "Failed to subscribe.")
@@ -188,7 +189,7 @@ func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, args []string) {
 
 	url, err := youtube.ResolveURL(ctx, args[0])
 	if err != nil {
-		// Resolution failed. Try the raw URL as-is.
+		// Fall back to the raw URL.
 		url = args[0]
 	}
 
@@ -277,7 +278,7 @@ func (bot *Bot) handleFormat(ctx context.Context, chatID int64, args []string) {
 }
 
 func (bot *Bot) reply(ctx context.Context, chatID int64, text string) {
-	if err := bot.tg.SendMessage(ctx, chatID, text, true); err != nil {
+	if err := bot.tg.SendMessage(ctx, chatID, format.TruncateHTML(text, format.MessageLimit), true); err != nil {
 		slog.Error("Failed to send message", "error", err, "chat_id", chatID)
 	}
 }

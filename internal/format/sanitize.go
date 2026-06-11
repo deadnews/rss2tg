@@ -132,8 +132,9 @@ func numberOL(s string) string {
 	})
 }
 
-// normalizeLines splits text on newlines, collapses whitespace, and drops empty lines.
-func normalizeLines(text string, maxLines int) []string {
+// normalizeText collapses whitespace per line, drops empty lines,
+// and keeps at most maxLines lines (0 = no limit).
+func normalizeText(text string, maxLines int) string {
 	var lines []string
 	for line := range strings.SplitSeq(text, "\n") {
 		line = strings.Join(strings.Fields(line), " ")
@@ -145,5 +146,5 @@ func normalizeLines(text string, maxLines int) []string {
 			break
 		}
 	}
-	return lines
+	return strings.Join(lines, "\n")
 }

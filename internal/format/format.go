@@ -45,7 +45,7 @@ func Preview(item *gofeed.Item, feedTitle, feedLink string) string {
 	var b strings.Builder
 	writeBoldTitle(&b, itemTitle(item), item.Link)
 
-	if excerpt := extractExcerpt(item, maxExcerptLines); excerpt != "" {
+	if excerpt := extractExcerpt(item); excerpt != "" {
 		b.WriteString("\n\n")
 		b.WriteString(excerpt)
 	}
@@ -82,7 +82,7 @@ func Text(item *gofeed.Item) string {
 	if text == "" {
 		text = item.Description
 	}
-	b.WriteString(strings.Join(normalizeLines(sanitizeHTML(text), 0), "\n"))
+	b.WriteString(normalizeText(sanitizeHTML(text), 0))
 	return b.String()
 }
 
@@ -129,10 +129,10 @@ func itemTitle(item *gofeed.Item) string {
 	return item.Link
 }
 
-func extractExcerpt(item *gofeed.Item, maxLines int) string {
+func extractExcerpt(item *gofeed.Item) string {
 	text := item.Description
 	if text == "" {
 		text = item.Content
 	}
-	return strings.Join(normalizeLines(sanitizeHTML(text), maxLines), "\n")
+	return normalizeText(sanitizeHTML(text), maxExcerptLines)
 }

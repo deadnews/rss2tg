@@ -3,7 +3,6 @@ package telegram
 // User represents a Telegram user.
 type User struct {
 	ID       int64  `json:"id"`
-	IsBot    bool   `json:"is_bot"`
 	Username string `json:"username"`
 }
 
@@ -14,10 +13,9 @@ type Chat struct {
 
 // Message represents a Telegram message.
 type Message struct {
-	MessageID int64  `json:"message_id"`
-	From      *User  `json:"from"`
-	Chat      Chat   `json:"chat"`
-	Text      string `json:"text"`
+	From *User  `json:"from"`
+	Chat Chat   `json:"chat"`
+	Text string `json:"text"`
 }
 
 // Update represents a Telegram update.

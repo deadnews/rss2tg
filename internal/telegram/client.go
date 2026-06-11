@@ -30,7 +30,7 @@ func NewClient(token string) *Client {
 		token:   token,
 		BaseURL: DefaultBaseURL,
 		client: &http.Client{
-			Timeout: 35 * time.Second,
+			Timeout: (longPollTimeout + 5) * time.Second,
 		},
 	}
 }
@@ -103,12 +103,10 @@ func (c *Client) postWithRetry(ctx context.Context, method string, payload any) 
 	}
 
 	if result.Parameters != nil && result.Parameters.RetryAfter > 0 {
-		timer := time.NewTimer(time.Duration(result.Parameters.RetryAfter) * time.Second)
 		select {
 		case <-ctx.Done():
-			timer.Stop()
 			return fmt.Errorf("%s: %w", method, ctx.Err())
-		case <-timer.C:
+		case <-time.After(time.Duration(result.Parameters.RetryAfter) * time.Second):
 		}
 
 		result, err = c.post(ctx, method, body)
@@ -138,7 +136,7 @@ func (c *Client) post(ctx context.Context, method string, body []byte) (*Respons
 
 	var result Response[json.RawMessage]
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("%s decode: %w", method, err)
+		return nil, fmt.Errorf("%s decode (status %d): %w", method, resp.StatusCode, err)
 	}
 	return &result, nil
 }
@@ -160,7 +158,7 @@ func (c *Client) get(ctx context.Context, method string, query url.Values, dest 
 	defer resp.Body.Close()
 
 	if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
-		return fmt.Errorf("%s: %w", method, err)
+		return fmt.Errorf("%s decode (status %d): %w", method, resp.StatusCode, err)
 	}
 	return nil
 }

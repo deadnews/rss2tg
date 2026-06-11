@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
@@ -13,24 +14,39 @@ import (
 	"github.com/deadnews/rss2tg/internal/telegram"
 )
 
-const pollBackoff = 5 * time.Second
+const (
+	pollRetryDelay   = 5 * time.Second
+	feedFetchTimeout = 40 * time.Second
+)
 
 // Bot orchestrates feed checks and Telegram updates.
 type Bot struct {
-	cfg    *Config
-	tg     *telegram.Client
-	store  *store.Store
-	parser *gofeed.Parser
+	cfg        *Config
+	tg         *telegram.Client
+	store      *store.Store
+	feedClient *http.Client
 }
 
 // NewBot creates a new Bot instance.
 func NewBot(cfg *Config, tg *telegram.Client, st *store.Store) *Bot {
 	return &Bot{
-		cfg:    cfg,
-		tg:     tg,
-		store:  st,
-		parser: gofeed.NewParser(),
+		cfg:        cfg,
+		tg:         tg,
+		store:      st,
+		feedClient: &http.Client{Timeout: feedFetchTimeout},
 	}
+}
+
+// parseFeed fetches and parses a feed. Fresh parser per call:
+// gofeed.Parser is not safe for concurrent use.
+func (bot *Bot) parseFeed(ctx context.Context, url string) (*gofeed.Feed, error) {
+	parser := gofeed.NewParser()
+	parser.Client = bot.feedClient
+	feed, err := parser.ParseURLWithContext(url, ctx)
+	if err != nil {
+		return nil, fmt.Errorf("parsing feed: %w", err)
+	}
+	return feed, nil
 }
 
 // Run validates the bot token and runs the feed-check and update-polling loops.
@@ -59,12 +75,10 @@ func (bot *Bot) pollUpdates(ctx context.Context) {
 				return
 			}
 			slog.Error("Failed to get updates", "error", err)
-			timer := time.NewTimer(pollBackoff)
 			select {
 			case <-ctx.Done():
-				timer.Stop()
 				return
-			case <-timer.C:
+			case <-time.After(pollRetryDelay):
 			}
 			continue
 		}
