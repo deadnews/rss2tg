@@ -75,6 +75,7 @@ linters:
       enable-all: true
     gosec:
       excludes:
+        - G115 # Integer overflow conversion
         - G701 # SQL injection via taint analysis
         - G703 # Path traversal via taint analysis
         - G704 # SSRF via taint analysis

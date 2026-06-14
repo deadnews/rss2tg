@@ -35,18 +35,18 @@ func TestNew(t *testing.T) {
 func TestAddSubAndListSubs(t *testing.T) {
 	s := testStore(t)
 
-	existed, err := s.AddSub(100, &Sub{URL: "https://example.com/feed.xml", Format: "link"})
+	existed, err := s.AddSub(100, 0, &Sub{URL: "https://example.com/feed.xml", Format: "link"})
 	require.NoError(t, err)
 	assert.False(t, existed)
 
-	_, err = s.AddSub(100, &Sub{URL: "https://example.com/feed2.xml", Format: "pw"})
+	_, err = s.AddSub(100, 0, &Sub{URL: "https://example.com/feed2.xml", Format: "pw"})
 	require.NoError(t, err)
 
-	existed, err = s.AddSub(100, &Sub{URL: "https://example.com/feed.xml", Format: "pw"})
+	existed, err = s.AddSub(100, 0, &Sub{URL: "https://example.com/feed.xml", Format: "pw"})
 	require.NoError(t, err)
 	assert.True(t, existed, "re-add should report existed=true")
 
-	subs, err := s.ListSubs(100)
+	subs, err := s.ListSubs(100, 0)
 	require.NoError(t, err)
 	assert.Len(t, subs, 2)
 }
@@ -54,7 +54,7 @@ func TestAddSubAndListSubs(t *testing.T) {
 func TestAddSubRoundTripsFilters(t *testing.T) {
 	s := testStore(t)
 
-	_, err := s.AddSub(100, &Sub{
+	_, err := s.AddSub(100, 0, &Sub{
 		URL:     "https://a.com/feed",
 		Format:  "link",
 		Exclude: []string{"crypto", "ai"},
@@ -62,7 +62,7 @@ func TestAddSubRoundTripsFilters(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	subs, err := s.ListSubs(100)
+	subs, err := s.ListSubs(100, 0)
 	require.NoError(t, err)
 	require.Len(t, subs, 1)
 	assert.Equal(t, []string{"crypto", "ai"}, subs[0].Exclude)
@@ -72,7 +72,7 @@ func TestAddSubRoundTripsFilters(t *testing.T) {
 func TestListSubsEmpty(t *testing.T) {
 	s := testStore(t)
 
-	subs, err := s.ListSubs(999)
+	subs, err := s.ListSubs(999, 0)
 	require.NoError(t, err)
 	assert.Empty(t, subs)
 }
@@ -80,18 +80,18 @@ func TestListSubsEmpty(t *testing.T) {
 func TestRemoveSub(t *testing.T) {
 	s := testStore(t)
 
-	_, err := s.AddSub(100, &Sub{URL: "https://example.com/feed.xml", Format: "link"})
+	_, err := s.AddSub(100, 0, &Sub{URL: "https://example.com/feed.xml", Format: "link"})
 	require.NoError(t, err)
 
-	existed, err := s.RemoveSub(100, "https://example.com/feed.xml")
+	existed, err := s.RemoveSub(100, 0, "https://example.com/feed.xml")
 	require.NoError(t, err)
 	assert.True(t, existed)
 
-	existed, err = s.RemoveSub(100, "https://example.com/feed.xml")
+	existed, err = s.RemoveSub(100, 0, "https://example.com/feed.xml")
 	require.NoError(t, err)
 	assert.False(t, existed)
 
-	existed, err = s.RemoveSub(999, "https://example.com/nope.xml")
+	existed, err = s.RemoveSub(999, 0, "https://example.com/nope.xml")
 	require.NoError(t, err)
 	assert.False(t, existed)
 }
@@ -99,16 +99,16 @@ func TestRemoveSub(t *testing.T) {
 func TestSetFormat(t *testing.T) {
 	s := testStore(t)
 
-	_, err := s.AddSub(100, &Sub{URL: "https://a.com/feed", Format: "link"})
+	_, err := s.AddSub(100, 0, &Sub{URL: "https://a.com/feed", Format: "link"})
 	require.NoError(t, err)
-	_, err = s.AddSub(100, &Sub{URL: "https://b.com/feed", Format: "link"})
+	_, err = s.AddSub(100, 0, &Sub{URL: "https://b.com/feed", Format: "link"})
 	require.NoError(t, err)
 
-	count, err := s.SetFormat(100, "pw")
+	count, err := s.SetFormat(100, 0, "pw")
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
 
-	subs, err := s.ListSubs(100)
+	subs, err := s.ListSubs(100, 0)
 	require.NoError(t, err)
 	for _, sub := range subs {
 		assert.Equal(t, "pw", sub.Format)
@@ -118,7 +118,7 @@ func TestSetFormat(t *testing.T) {
 func TestSetFormatNoSubs(t *testing.T) {
 	s := testStore(t)
 
-	count, err := s.SetFormat(999, "pw")
+	count, err := s.SetFormat(999, 0, "pw")
 	require.NoError(t, err)
 	assert.Equal(t, 0, count)
 }
@@ -126,11 +126,11 @@ func TestSetFormatNoSubs(t *testing.T) {
 func TestAllFeeds(t *testing.T) {
 	s := testStore(t)
 
-	_, err := s.AddSub(100, &Sub{URL: "https://a.com/feed", Format: "link"})
+	_, err := s.AddSub(100, 0, &Sub{URL: "https://a.com/feed", Format: "link"})
 	require.NoError(t, err)
-	_, err = s.AddSub(200, &Sub{URL: "https://a.com/feed", Format: "pw"})
+	_, err = s.AddSub(200, 0, &Sub{URL: "https://a.com/feed", Format: "pw"})
 	require.NoError(t, err)
-	_, err = s.AddSub(100, &Sub{URL: "https://b.com/feed", Format: "link"})
+	_, err = s.AddSub(100, 0, &Sub{URL: "https://b.com/feed", Format: "link"})
 	require.NoError(t, err)
 
 	feeds, err := s.AllFeeds()
@@ -140,13 +140,72 @@ func TestAllFeeds(t *testing.T) {
 	assert.Len(t, feeds["https://b.com/feed"], 1)
 }
 
+func TestSubsIsolatedPerThread(t *testing.T) {
+	s := testStore(t)
+	const url = "https://a.com/feed"
+
+	_, err := s.AddSub(100, 0, &Sub{URL: url, Format: "link"})
+	require.NoError(t, err)
+	_, err = s.AddSub(100, 5, &Sub{URL: url, Format: "pw"})
+	require.NoError(t, err)
+
+	general, err := s.ListSubs(100, 0)
+	require.NoError(t, err)
+	require.Len(t, general, 1)
+	assert.Equal(t, "link", general[0].Format)
+
+	topic, err := s.ListSubs(100, 5)
+	require.NoError(t, err)
+	require.Len(t, topic, 1)
+	assert.Equal(t, "pw", topic[0].Format)
+
+	// Same feed in two topics → two delivery targets, each with its thread ID.
+	feeds, err := s.AllFeeds()
+	require.NoError(t, err)
+	require.Len(t, feeds[url], 2)
+	threads := map[int]bool{}
+	for _, cf := range feeds[url] {
+		assert.Equal(t, int64(100), cf.ChatID)
+		threads[cf.ThreadID] = true
+	}
+	assert.Equal(t, map[int]bool{0: true, 5: true}, threads)
+}
+
+func TestFindFeedThread(t *testing.T) {
+	s := testStore(t)
+
+	_, err := s.AddSub(100, 7, &Sub{URL: "https://a.com/feed", Format: "link"})
+	require.NoError(t, err)
+	_, err = s.AddSub(100, 0, &Sub{URL: "https://general.com/feed", Format: "link"})
+	require.NoError(t, err)
+
+	tid, found, err := s.FindFeedThread(100, "https://a.com/feed")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, 7, tid)
+
+	tid, found, err = s.FindFeedThread(100, "https://general.com/feed")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, 0, tid)
+
+	_, found, err = s.FindFeedThread(100, "https://missing.com/feed")
+	require.NoError(t, err)
+	assert.False(t, found)
+
+	// A different chat with the same URL must not match.
+	_, found, err = s.FindFeedThread(200, "https://a.com/feed")
+	require.NoError(t, err)
+	assert.False(t, found)
+}
+
 func TestAddSubRoundTripsShorts(t *testing.T) {
 	s := testStore(t)
 
-	_, err := s.AddSub(100, &Sub{URL: "https://yt/feed", Format: "pw", Shorts: true})
+	_, err := s.AddSub(100, 0, &Sub{URL: "https://yt/feed", Format: "pw", Shorts: true})
 	require.NoError(t, err)
 
-	subs, err := s.ListSubs(100)
+	subs, err := s.ListSubs(100, 0)
 	require.NoError(t, err)
 	require.Len(t, subs, 1)
 	assert.Equal(t, "pw", subs[0].Format)
@@ -156,13 +215,13 @@ func TestAddSubRoundTripsShorts(t *testing.T) {
 func TestSetFormatPreservesShorts(t *testing.T) {
 	s := testStore(t)
 
-	_, err := s.AddSub(100, &Sub{URL: "https://yt/feed", Format: "link", Shorts: true})
+	_, err := s.AddSub(100, 0, &Sub{URL: "https://yt/feed", Format: "link", Shorts: true})
 	require.NoError(t, err)
 
-	_, err = s.SetFormat(100, "pw")
+	_, err = s.SetFormat(100, 0, "pw")
 	require.NoError(t, err)
 
-	subs, err := s.ListSubs(100)
+	subs, err := s.ListSubs(100, 0)
 	require.NoError(t, err)
 	require.Len(t, subs, 1)
 	assert.Equal(t, "pw", subs[0].Format)

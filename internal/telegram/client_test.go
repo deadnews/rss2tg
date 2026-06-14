@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -112,6 +113,7 @@ func TestSendMessage(t *testing.T) {
 			var payload sendMessageRequest
 			_ = json.NewDecoder(r.Body).Decode(&payload)
 			assert.Equal(t, int64(100), payload.ChatID)
+			assert.Equal(t, 0, payload.MessageThreadID)
 			assert.Equal(t, "HTML", payload.ParseMode)
 			assert.Equal(t, "<b>hello</b>", payload.Text)
 			assert.Nil(t, payload.LinkPreviewOptions)
@@ -120,7 +122,21 @@ func TestSendMessage(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: true})
 		})
 
-		err := c.SendMessage(t.Context(), 100, "<b>hello</b>", false)
+		err := c.SendMessage(t.Context(), 100, 0, "<b>hello</b>", false)
+		require.NoError(t, err)
+	})
+
+	t.Run("routes to forum topic", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			var payload sendMessageRequest
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			assert.Equal(t, 7, payload.MessageThreadID)
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: true})
+		})
+
+		err := c.SendMessage(t.Context(), 100, 7, "text", false)
 		require.NoError(t, err)
 	})
 
@@ -136,7 +152,7 @@ func TestSendMessage(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: true})
 		})
 
-		err := c.SendMessage(t.Context(), 100, "text", true)
+		err := c.SendMessage(t.Context(), 100, 0, "text", true)
 		require.NoError(t, err)
 	})
 
@@ -146,7 +162,7 @@ func TestSendMessage(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: false, Desc: "chat not found"})
 		})
 
-		err := c.SendMessage(t.Context(), 100, "text", false)
+		err := c.SendMessage(t.Context(), 100, 0, "text", false)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "chat not found")
 	})
@@ -166,9 +182,58 @@ func TestSendMessage(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: true})
 		})
 
-		err := c.SendMessage(t.Context(), 100, "text", false)
+		err := c.SendMessage(t.Context(), 100, 0, "text", false)
 		require.NoError(t, err)
 		assert.Equal(t, int32(2), attempts.Load())
+	})
+}
+
+func TestCreateForumTopic(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, http.MethodPost, r.Method)
+			assert.Contains(t, r.URL.Path, "/createForumTopic")
+
+			var payload createForumTopicRequest
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			assert.Equal(t, int64(100), payload.ChatID)
+			assert.Equal(t, "News", payload.Name)
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Response[ForumTopic]{
+				OK:     true,
+				Result: ForumTopic{MessageThreadID: 55, Name: "News"},
+			})
+		})
+
+		id, err := c.CreateForumTopic(t.Context(), 100, "News")
+		require.NoError(t, err)
+		assert.Equal(t, 55, id)
+	})
+
+	t.Run("truncates long name", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			var payload createForumTopicRequest
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			assert.Len(t, []rune(payload.Name), maxForumTopicName)
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Response[ForumTopic]{OK: true, Result: ForumTopic{MessageThreadID: 1}})
+		})
+
+		_, err := c.CreateForumTopic(t.Context(), 100, strings.Repeat("x", 200))
+		require.NoError(t, err)
+	})
+
+	t.Run("error response", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: false, Desc: "not enough rights"})
+		})
+
+		_, err := c.CreateForumTopic(t.Context(), 100, "News")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not enough rights")
 	})
 }
 
@@ -189,7 +254,7 @@ func TestSendPhoto(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: true})
 		})
 
-		err := c.SendPhoto(t.Context(), 100, "https://img.com/1.jpg", "<b>caption</b>")
+		err := c.SendPhoto(t.Context(), 100, 0, "https://img.com/1.jpg", "<b>caption</b>")
 		require.NoError(t, err)
 	})
 
@@ -199,7 +264,7 @@ func TestSendPhoto(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: false, Desc: "photo too large"})
 		})
 
-		err := c.SendPhoto(t.Context(), 100, "https://img.com/big.jpg", "cap")
+		err := c.SendPhoto(t.Context(), 100, 0, "https://img.com/big.jpg", "cap")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "photo too large")
 	})

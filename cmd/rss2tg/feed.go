@@ -87,17 +87,17 @@ func (bot *Bot) sendEntry(ctx context.Context, item *gofeed.Item, feedTitle, fee
 	case formatPreview:
 		caption := format.Preview(item, feedTitle, feedLink)
 		if img := format.ExtractImage(item); img != "" {
-			if err = bot.tg.SendPhoto(ctx, chat.ChatID, img, format.TruncateHTML(caption, format.CaptionLimit)); err == nil {
+			if err = bot.tg.SendPhoto(ctx, chat.ChatID, chat.ThreadID, img, format.TruncateHTML(caption, format.CaptionLimit)); err == nil {
 				return nil
 			}
 			slog.Warn("SendPhoto failed, falling back to message", "url", img, "error", err)
 		}
-		err = bot.tg.SendMessage(ctx, chat.ChatID, format.TruncateHTML(caption, format.MessageLimit), false)
+		err = bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, format.TruncateHTML(caption, format.MessageLimit), false)
 	case formatText:
-		err = bot.tg.SendMessage(ctx, chat.ChatID, format.TruncateHTML(format.Text(item), format.MessageLimit), true)
+		err = bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, format.TruncateHTML(format.Text(item), format.MessageLimit), true)
 	default:
 		text := format.Link(item, bot.youtubeMeta(ctx, item.Link))
-		err = bot.tg.SendMessage(ctx, chat.ChatID, format.TruncateHTML(text, format.MessageLimit), false)
+		err = bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, format.TruncateHTML(text, format.MessageLimit), false)
 	}
 	if err != nil {
 		return fmt.Errorf("send entry: %w", err)

@@ -51,6 +51,12 @@ sub as the exact `/sub` line to copy, edit, and resend).
 /sub https://reddit.com/r/programming/.rss link include:go,rust
 ```
 
+### Forum topics
+
+In a forum supergroup, `/sub` from the **General** topic auto-creates a topic per
+feed (the bot must be an admin with `can_manage_topics`); run it inside a topic to
+subscribe there instead. Each topic keeps its own subscriptions.
+
 ## Message Formats
 
 `link` (default) — bold title + URL:

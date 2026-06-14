@@ -64,11 +64,12 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64) ([]Update, error)
 }
 
 // SendMessage sends an HTML message to a chat, retrying once on rate limit.
-func (c *Client) SendMessage(ctx context.Context, chatID int64, text string, disablePreview bool) error {
+func (c *Client) SendMessage(ctx context.Context, chatID int64, threadID int, text string, disablePreview bool) error {
 	payload := sendMessageRequest{
-		ChatID:    chatID,
-		Text:      text,
-		ParseMode: "HTML",
+		ChatID:          chatID,
+		MessageThreadID: threadID,
+		Text:            text,
+		ParseMode:       "HTML",
 	}
 	if disablePreview {
 		payload.LinkPreviewOptions = &linkPreviewOptions{IsDisabled: true}
@@ -77,14 +78,41 @@ func (c *Client) SendMessage(ctx context.Context, chatID int64, text string, dis
 }
 
 // SendPhoto sends a photo by URL with an HTML caption.
-func (c *Client) SendPhoto(ctx context.Context, chatID int64, photoURL, caption string) error {
+func (c *Client) SendPhoto(ctx context.Context, chatID int64, threadID int, photoURL, caption string) error {
 	payload := sendPhotoRequest{
-		ChatID:    chatID,
-		Photo:     photoURL,
-		Caption:   caption,
-		ParseMode: "HTML",
+		ChatID:          chatID,
+		MessageThreadID: threadID,
+		Photo:           photoURL,
+		Caption:         caption,
+		ParseMode:       "HTML",
 	}
 	return c.postWithRetry(ctx, "sendPhoto", payload)
+}
+
+// maxForumTopicName is Telegram's forum topic name length limit.
+const maxForumTopicName = 128
+
+// CreateForumTopic creates a forum topic and returns its message thread ID.
+func (c *Client) CreateForumTopic(ctx context.Context, chatID int64, name string) (int, error) {
+	if r := []rune(name); len(r) > maxForumTopicName {
+		name = string(r[:maxForumTopicName])
+	}
+	body, err := json.Marshal(createForumTopicRequest{ChatID: chatID, Name: name})
+	if err != nil {
+		return 0, fmt.Errorf("createForumTopic marshal: %w", err)
+	}
+	result, err := c.post(ctx, "createForumTopic", body)
+	if err != nil {
+		return 0, err
+	}
+	if !result.OK {
+		return 0, fmt.Errorf("createForumTopic: %s", result.Desc)
+	}
+	var topic ForumTopic
+	if err := json.Unmarshal(result.Result, &topic); err != nil {
+		return 0, fmt.Errorf("createForumTopic decode: %w", err)
+	}
+	return topic.MessageThreadID, nil
 }
 
 // postWithRetry POSTs payload, retrying once on 429.

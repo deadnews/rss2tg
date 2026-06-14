@@ -109,12 +109,102 @@ func TestHandleSub(t *testing.T) {
 	require.Len(t, sent, 1)
 	assert.Contains(t, sent[0].Text, "Subscribed")
 
-	subs, err := tb.store.ListSubs(100)
+	subs, err := tb.store.ListSubs(100, 0)
 	require.NoError(t, err)
 	require.Len(t, subs, 1)
 	assert.Equal(t, feedURL, subs[0].URL)
 	assert.Equal(t, "link", subs[0].Format)
 	assert.Equal(t, "Command Test Feed", subs[0].Title)
+}
+
+func TestHandleSubInTopicRoutesToThread(t *testing.T) {
+	tb := newTestCmdBot(t)
+	feedURL := tb.ts.URL + "/cmd.xml"
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From:            &telegram.User{ID: 42},
+		Chat:            telegram.Chat{ID: 100},
+		MessageThreadID: 5,
+		IsTopicMessage:  true,
+		Text:            "/sub " + feedURL,
+	})
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Equal(t, 5, sent[0].ThreadID, "reply should go to the originating topic")
+
+	// Sub is scoped to the topic, not the General feed.
+	topic, err := tb.store.ListSubs(100, 5)
+	require.NoError(t, err)
+	require.Len(t, topic, 1)
+	assert.Equal(t, feedURL, topic[0].URL)
+
+	general, err := tb.store.ListSubs(100, 0)
+	require.NoError(t, err)
+	assert.Empty(t, general)
+}
+
+func TestHandleSubInForumGeneralCreatesTopic(t *testing.T) {
+	tb := newTestCmdBot(t)
+	feedURL := tb.ts.URL + "/cmd.xml"
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 100, IsForum: true},
+		Text: "/sub " + feedURL,
+	})
+
+	// A topic named after the feed was created; General holds no sub.
+	assert.Equal(t, []string{"Command Test Feed"}, tb.getTopics())
+	general, err := tb.store.ListSubs(100, 0)
+	require.NoError(t, err)
+	assert.Empty(t, general)
+
+	// The feed lives in the new topic and the reply landed there.
+	feeds, err := tb.store.AllFeeds()
+	require.NoError(t, err)
+	require.Len(t, feeds[feedURL], 1)
+	thread := feeds[feedURL][0].ThreadID
+	assert.NotZero(t, thread)
+
+	sent := tb.getSent()
+	require.NotEmpty(t, sent)
+	assert.Equal(t, thread, sent[0].ThreadID)
+}
+
+func TestHandleSubInForumGeneralReusesTopic(t *testing.T) {
+	tb := newTestCmdBot(t)
+	feedURL := tb.ts.URL + "/cmd.xml"
+
+	for range 2 {
+		tb.bot.handleCommand(t.Context(), &telegram.Message{
+			From: &telegram.User{ID: 42},
+			Chat: telegram.Chat{ID: 100, IsForum: true},
+			Text: "/sub " + feedURL,
+		})
+	}
+
+	// Re-subscribing reuses the feed's topic instead of spawning a new one.
+	assert.Len(t, tb.getTopics(), 1)
+	feeds, err := tb.store.AllFeeds()
+	require.NoError(t, err)
+	assert.Len(t, feeds[feedURL], 1)
+}
+
+func TestHandleSubNonForumSkipsTopic(t *testing.T) {
+	tb := newTestCmdBot(t)
+	feedURL := tb.ts.URL + "/cmd.xml"
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 100},
+		Text: "/sub " + feedURL,
+	})
+
+	assert.Empty(t, tb.getTopics())
+	general, err := tb.store.ListSubs(100, 0)
+	require.NoError(t, err)
+	require.Len(t, general, 1)
 }
 
 func TestHandleListShowsTitle(t *testing.T) {
@@ -152,7 +242,7 @@ func TestHandleSubWithFormat(t *testing.T) {
 
 	require.Len(t, tb.getSent(), 1)
 
-	subs, err := tb.store.ListSubs(100)
+	subs, err := tb.store.ListSubs(100, 0)
 	require.NoError(t, err)
 	require.Len(t, subs, 1)
 	assert.Equal(t, feedURL, subs[0].URL)
@@ -186,7 +276,7 @@ func TestHandleSubInvalidFormat(t *testing.T) {
 	require.Len(t, sent, 1)
 	assert.Contains(t, sent[0].Text, "Usage")
 
-	subs, err := tb.store.ListSubs(100)
+	subs, err := tb.store.ListSubs(100, 0)
 	require.NoError(t, err)
 	assert.Empty(t, subs)
 }
@@ -204,7 +294,7 @@ func TestHandleSubInvalidFeed(t *testing.T) {
 	require.Len(t, sent, 1)
 	assert.Contains(t, sent[0].Text, "Failed to subscribe")
 
-	subs, err := tb.store.ListSubs(100)
+	subs, err := tb.store.ListSubs(100, 0)
 	require.NoError(t, err)
 	assert.Empty(t, subs)
 }
@@ -212,7 +302,7 @@ func TestHandleSubInvalidFeed(t *testing.T) {
 func TestHandleUnsub(t *testing.T) {
 	tb := newTestCmdBot(t)
 
-	_, err := tb.store.AddSub(100, &store.Sub{URL: "https://example.com/feed.xml", Format: "link"})
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: "https://example.com/feed.xml", Format: "link"})
 	require.NoError(t, err)
 
 	tb.bot.handleCommand(t.Context(), &telegram.Message{
@@ -257,9 +347,9 @@ func TestHandleUnsubNoArgs(t *testing.T) {
 func TestHandleList(t *testing.T) {
 	tb := newTestCmdBot(t)
 
-	_, err := tb.store.AddSub(100, &store.Sub{URL: "https://a.com/feed", Format: "link"})
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: "https://a.com/feed", Format: "link"})
 	require.NoError(t, err)
-	_, err = tb.store.AddSub(100, &store.Sub{URL: "https://b.com/feed", Format: "pw"})
+	_, err = tb.store.AddSub(100, 0, &store.Sub{URL: "https://b.com/feed", Format: "pw"})
 	require.NoError(t, err)
 
 	tb.bot.handleCommand(t.Context(), &telegram.Message{
@@ -291,7 +381,7 @@ func TestHandleListEmpty(t *testing.T) {
 func TestHandleFormat(t *testing.T) {
 	tb := newTestCmdBot(t)
 
-	_, err := tb.store.AddSub(100, &store.Sub{URL: "https://a.com/feed", Format: "link"})
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: "https://a.com/feed", Format: "link"})
 	require.NoError(t, err)
 
 	tb.bot.handleCommand(t.Context(), &telegram.Message{
@@ -304,7 +394,7 @@ func TestHandleFormat(t *testing.T) {
 	require.Len(t, sent, 1)
 	assert.Contains(t, sent[0].Text, "Updated 1")
 
-	subs, err := tb.store.ListSubs(100)
+	subs, err := tb.store.ListSubs(100, 0)
 	require.NoError(t, err)
 	assert.Equal(t, "pw", subs[0].Format)
 }
@@ -403,7 +493,7 @@ func TestHandleSubWithFilters(t *testing.T) {
 	require.Len(t, sent, 1)
 	assert.Contains(t, sent[0].Text, "Subscribed")
 
-	subs, err := tb.store.ListSubs(100)
+	subs, err := tb.store.ListSubs(100, 0)
 	require.NoError(t, err)
 	require.Len(t, subs, 1)
 	assert.Equal(t, []string{"crypto", "ai"}, subs[0].Exclude)
@@ -431,7 +521,7 @@ func TestHandleSubResubReplies(t *testing.T) {
 func TestHandleListRendersFilters(t *testing.T) {
 	tb := newTestCmdBot(t)
 
-	_, err := tb.store.AddSub(100, &store.Sub{
+	_, err := tb.store.AddSub(100, 0, &store.Sub{
 		URL:     "https://a.com/feed",
 		Title:   "Feed A",
 		Format:  "pw",

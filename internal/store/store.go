@@ -90,15 +90,15 @@ func (s *Store) Close() error {
 	return nil
 }
 
-// AddSub subscribes a chat to a feed. Returns whether the URL was already subscribed.
-func (s *Store) AddSub(chatID int64, sub *Sub) (bool, error) {
+// AddSub subscribes a chat topic to a feed. Returns whether the URL was already subscribed.
+func (s *Store) AddSub(chatID int64, threadID int, sub *Sub) (bool, error) {
 	val, err := json.Marshal(sub)
 	if err != nil {
 		return false, fmt.Errorf("encoding sub: %w", err)
 	}
 	var existed bool
 	err = s.db.Update(func(tx *bolt.Tx) error {
-		chat, err := tx.Bucket(bucketSubs).CreateBucketIfNotExists(chatKey(chatID))
+		chat, err := tx.Bucket(bucketSubs).CreateBucketIfNotExists(chatKey(chatID, threadID))
 		if err != nil {
 			return fmt.Errorf("creating chat bucket: %w", err)
 		}
@@ -111,12 +111,12 @@ func (s *Store) AddSub(chatID int64, sub *Sub) (bool, error) {
 	return existed, nil
 }
 
-// RemoveSub unsubscribes a chat from a feed URL. Returns true if it existed.
-func (s *Store) RemoveSub(chatID int64, feedURL string) (bool, error) {
+// RemoveSub unsubscribes a chat topic from a feed URL. Returns true if it existed.
+func (s *Store) RemoveSub(chatID int64, threadID int, feedURL string) (bool, error) {
 	var existed bool
 
 	err := s.db.Update(func(tx *bolt.Tx) error {
-		chat := tx.Bucket(bucketSubs).Bucket(chatKey(chatID))
+		chat := tx.Bucket(bucketSubs).Bucket(chatKey(chatID, threadID))
 		if chat == nil {
 			return nil
 		}
@@ -131,12 +131,12 @@ func (s *Store) RemoveSub(chatID int64, feedURL string) (bool, error) {
 	return existed, nil
 }
 
-// ListSubs returns all subscriptions for a chat.
-func (s *Store) ListSubs(chatID int64) ([]Sub, error) {
+// ListSubs returns all subscriptions for a chat topic.
+func (s *Store) ListSubs(chatID int64, threadID int) ([]Sub, error) {
 	var subs []Sub
 
 	err := s.db.View(func(tx *bolt.Tx) error {
-		chat := tx.Bucket(bucketSubs).Bucket(chatKey(chatID))
+		chat := tx.Bucket(bucketSubs).Bucket(chatKey(chatID, threadID))
 		if chat == nil {
 			return nil
 		}
@@ -151,12 +151,12 @@ func (s *Store) ListSubs(chatID int64) ([]Sub, error) {
 	return subs, nil
 }
 
-// SetFormat updates the format for all subscriptions in a chat, preserving other options.
-func (s *Store) SetFormat(chatID int64, format string) (int, error) {
+// SetFormat updates the format for all subscriptions in a chat topic, preserving other options.
+func (s *Store) SetFormat(chatID int64, threadID int, format string) (int, error) {
 	var count int
 
 	err := s.db.Update(func(tx *bolt.Tx) error {
-		chat := tx.Bucket(bucketSubs).Bucket(chatKey(chatID))
+		chat := tx.Bucket(bucketSubs).Bucket(chatKey(chatID, threadID))
 		if chat == nil {
 			return nil
 		}
@@ -184,23 +184,25 @@ func (s *Store) SetFormat(chatID int64, format string) (int, error) {
 	return count, nil
 }
 
-// ChatFeed pairs a chat ID with its subscription options for a given feed.
+// ChatFeed pairs a chat topic with its subscription options for a given feed.
 type ChatFeed struct {
-	ChatID  int64
-	Format  string
-	Shorts  bool
-	Exclude []string
-	Include []string
+	ChatID   int64
+	ThreadID int
+	Format   string
+	Shorts   bool
+	Exclude  []string
+	Include  []string
 }
 
-// ChatFeed projects a Sub into the delivery options for the given chat.
-func (sub *Sub) ChatFeed(chatID int64) ChatFeed {
+// ChatFeed projects a Sub into the delivery options for the given chat topic.
+func (sub *Sub) ChatFeed(chatID int64, threadID int) ChatFeed {
 	return ChatFeed{
-		ChatID:  chatID,
-		Format:  sub.Format,
-		Shorts:  sub.Shorts,
-		Exclude: sub.Exclude,
-		Include: sub.Include,
+		ChatID:   chatID,
+		ThreadID: threadID,
+		Format:   sub.Format,
+		Shorts:   sub.Shorts,
+		Exclude:  sub.Exclude,
+		Include:  sub.Include,
 	}
 }
 
@@ -211,7 +213,7 @@ func (s *Store) AllFeeds() (map[string][]ChatFeed, error) {
 	err := s.db.View(func(tx *bolt.Tx) error {
 		subs := tx.Bucket(bucketSubs)
 		return subs.ForEach(func(k, _ []byte) error {
-			chatID := parseChatKey(k)
+			chatID, threadID := parseChatKey(k)
 			chat := subs.Bucket(k)
 			if chat == nil {
 				return nil
@@ -221,7 +223,7 @@ func (s *Store) AllFeeds() (map[string][]ChatFeed, error) {
 				if err != nil {
 					return err
 				}
-				feeds[sub.URL] = append(feeds[sub.URL], sub.ChatFeed(chatID))
+				feeds[sub.URL] = append(feeds[sub.URL], sub.ChatFeed(chatID, threadID))
 				return nil
 			})
 		})
@@ -231,6 +233,28 @@ func (s *Store) AllFeeds() (map[string][]ChatFeed, error) {
 	}
 
 	return feeds, nil
+}
+
+// FindFeedThread returns the topic a feed is subscribed under in a chat, if any.
+func (s *Store) FindFeedThread(chatID int64, feedURL string) (threadID int, found bool, err error) {
+	prefix := chatKey(chatID, 0) // shared 8-byte chat prefix across the chat's topics
+	err = s.db.View(func(tx *bolt.Tx) error {
+		subs := tx.Bucket(bucketSubs)
+		return subs.ForEach(func(k, _ []byte) error {
+			if found || !bytes.HasPrefix(k, prefix) {
+				return nil
+			}
+			if chat := subs.Bucket(k); chat != nil && chat.Get([]byte(feedURL)) != nil {
+				_, threadID = parseChatKey(k)
+				found = true
+			}
+			return nil
+		})
+	})
+	if err != nil {
+		return 0, false, fmt.Errorf("finding feed thread: %w", err)
+	}
+	return threadID, found, nil
 }
 
 // IsSeen checks if an entry GUID has been seen for a feed URL.
@@ -260,7 +284,7 @@ func (s *Store) MarkSeen(feedURL, guid string) error {
 			return fmt.Errorf("creating seen feed bucket: %w", err)
 		}
 		ts := make([]byte, 8)
-		binary.BigEndian.PutUint64(ts, uint64(time.Now().Unix())) //nolint:gosec // unix timestamps are always positive
+		binary.BigEndian.PutUint64(ts, uint64(time.Now().Unix()))
 		return feed.Put([]byte(guid), ts)
 	})
 	if err != nil {
@@ -306,12 +330,23 @@ func (s *Store) TrimSeen(feedURL string, keep int) error {
 	return nil
 }
 
-func chatKey(id int64) []byte {
-	b := make([]byte, 8)
-	binary.BigEndian.PutUint64(b, uint64(id)) //nolint:gosec // chat IDs fit in int64
+// chatKey encodes a chat topic; threadID 0 uses a legacy 8-byte chat-only key.
+func chatKey(chatID int64, threadID int) []byte {
+	if threadID == 0 {
+		b := make([]byte, 8)
+		binary.BigEndian.PutUint64(b, uint64(chatID))
+		return b
+	}
+	b := make([]byte, 16)
+	binary.BigEndian.PutUint64(b[:8], uint64(chatID))
+	binary.BigEndian.PutUint64(b[8:], uint64(threadID))
 	return b
 }
 
-func parseChatKey(b []byte) int64 {
-	return int64(binary.BigEndian.Uint64(b)) //nolint:gosec // chat IDs fit in int64
+func parseChatKey(b []byte) (chatID int64, threadID int) {
+	chatID = int64(binary.BigEndian.Uint64(b[:8]))
+	if len(b) >= 16 {
+		threadID = int(binary.BigEndian.Uint64(b[8:]))
+	}
+	return chatID, threadID
 }

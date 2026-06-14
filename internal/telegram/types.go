@@ -8,14 +8,23 @@ type User struct {
 
 // Chat represents a Telegram chat.
 type Chat struct {
-	ID int64 `json:"id"`
+	ID      int64 `json:"id"`
+	IsForum bool  `json:"is_forum"`
+}
+
+// ForumTopic represents a created forum topic.
+type ForumTopic struct {
+	MessageThreadID int    `json:"message_thread_id"`
+	Name            string `json:"name"`
 }
 
 // Message represents a Telegram message.
 type Message struct {
-	From *User  `json:"from"`
-	Chat Chat   `json:"chat"`
-	Text string `json:"text"`
+	From            *User  `json:"from"`
+	Chat            Chat   `json:"chat"`
+	Text            string `json:"text"`
+	MessageThreadID int    `json:"message_thread_id"`
+	IsTopicMessage  bool   `json:"is_topic_message"`
 }
 
 // Update represents a Telegram update.
@@ -43,14 +52,21 @@ type responseParameters struct {
 
 type sendMessageRequest struct {
 	ChatID             int64               `json:"chat_id"`
+	MessageThreadID    int                 `json:"message_thread_id,omitempty"`
 	Text               string              `json:"text"`
 	ParseMode          string              `json:"parse_mode"`
 	LinkPreviewOptions *linkPreviewOptions `json:"link_preview_options,omitempty"`
 }
 
 type sendPhotoRequest struct {
-	ChatID    int64  `json:"chat_id"`
-	Photo     string `json:"photo"`
-	Caption   string `json:"caption,omitempty"`
-	ParseMode string `json:"parse_mode"`
+	ChatID          int64  `json:"chat_id"`
+	MessageThreadID int    `json:"message_thread_id,omitempty"`
+	Photo           string `json:"photo"`
+	Caption         string `json:"caption,omitempty"`
+	ParseMode       string `json:"parse_mode"`
+}
+
+type createForumTopicRequest struct {
+	ChatID int64  `json:"chat_id"`
+	Name   string `json:"name"`
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"html"
@@ -39,6 +40,8 @@ const helpText = `<b>Available commands:</b>
 
 YouTube channel URLs are auto-resolved to their Atom feed. YouTube Shorts are filtered by default; pass <code>shorts</code> to include them.
 
+In a forum group, <code>/sub</code> from the General topic creates a topic per feed; run it inside a topic to subscribe there.
+
 Filters match whole words in the title (case-insensitive). Exclude wins over include.`
 
 // handleCommand dispatches a bot command from an authorized user.
@@ -60,17 +63,23 @@ func (bot *Bot) handleCommand(ctx context.Context, msg *telegram.Message) {
 		cmd = cmd[:i]
 	}
 
+	// Scope the command to its forum topic; General topic reports no thread.
+	var threadID int
+	if msg.IsTopicMessage {
+		threadID = msg.MessageThreadID
+	}
+
 	switch cmd {
 	case "/start", "/help":
-		bot.reply(ctx, msg.Chat.ID, helpText)
+		bot.reply(ctx, msg.Chat.ID, threadID, helpText)
 	case "/sub":
-		bot.handleSub(ctx, msg.Chat.ID, parts[1:])
+		bot.handleSub(ctx, msg.Chat.ID, threadID, msg.Chat.IsForum, parts[1:])
 	case "/unsub":
-		bot.handleUnsub(ctx, msg.Chat.ID, parts[1:])
+		bot.handleUnsub(ctx, msg.Chat.ID, threadID, parts[1:])
 	case "/list":
-		bot.handleList(ctx, msg.Chat.ID)
+		bot.handleList(ctx, msg.Chat.ID, threadID)
 	case "/format":
-		bot.handleFormat(ctx, msg.Chat.ID, parts[1:])
+		bot.handleFormat(ctx, msg.Chat.ID, threadID, parts[1:])
 	}
 }
 
@@ -121,30 +130,50 @@ func parseSubArgs(args []string) (parsedSubArgs, bool) {
 	return out, true
 }
 
-func (bot *Bot) handleSub(ctx context.Context, chatID int64, args []string) {
+func (bot *Bot) handleSub(ctx context.Context, chatID int64, threadID int, isForum bool, args []string) {
 	if len(args) == 0 {
-		bot.reply(ctx, chatID, subUsage)
+		bot.reply(ctx, chatID, threadID, subUsage)
 		return
 	}
 
 	opts, ok := parseSubArgs(args[1:])
 	if !ok {
-		bot.reply(ctx, chatID, subUsage)
+		bot.reply(ctx, chatID, threadID, subUsage)
 		return
 	}
 
 	url, err := youtube.ResolveURL(ctx, args[0])
 	if err != nil {
 		slog.Error("Failed to resolve YouTube URL", "url", args[0], "error", err)
-		bot.reply(ctx, chatID, "Failed to subscribe.")
+		bot.reply(ctx, chatID, threadID, "Failed to subscribe.")
 		return
 	}
 
 	feed, err := bot.parseFeed(ctx, url)
 	if err != nil {
 		slog.Error("Failed to parse feed", "url", url, "error", err)
-		bot.reply(ctx, chatID, "Failed to subscribe.")
+		bot.reply(ctx, chatID, threadID, "Failed to subscribe.")
 		return
+	}
+
+	// In a forum's General topic, give each feed its own topic, reusing the
+	// feed's existing topic or creating one named after the feed.
+	if isForum && threadID == 0 {
+		existing, found, ferr := bot.store.FindFeedThread(chatID, url)
+		if ferr != nil {
+			slog.Error("Failed to find feed thread", "chat_id", chatID, "error", ferr)
+			bot.reply(ctx, chatID, 0, "Failed to subscribe.")
+			return
+		}
+		threadID = existing
+		if !found {
+			threadID, err = bot.tg.CreateForumTopic(ctx, chatID, cmp.Or(feed.Title, url))
+			if err != nil {
+				slog.Error("Failed to create forum topic", "chat_id", chatID, "error", err)
+				bot.reply(ctx, chatID, 0, "Failed to create topic. The bot must be an admin with Manage Topics.")
+				return
+			}
+		}
 	}
 
 	sub := store.Sub{
@@ -155,10 +184,10 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, args []string) {
 		Exclude: opts.exclude,
 		Include: opts.include,
 	}
-	existed, err := bot.store.AddSub(chatID, &sub)
+	existed, err := bot.store.AddSub(chatID, threadID, &sub)
 	if err != nil {
 		slog.Error("Failed to add subscription", "error", err)
-		bot.reply(ctx, chatID, "Failed to subscribe.")
+		bot.reply(ctx, chatID, threadID, "Failed to subscribe.")
 		return
 	}
 
@@ -166,8 +195,8 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, args []string) {
 	if existed {
 		verb = "Updated subscription for"
 	}
-	bot.reply(ctx, chatID, fmt.Sprintf("%s %s (%s)", verb, url, sub.Format))
-	bot.deliverInitialEntries(ctx, url, feed, []store.ChatFeed{sub.ChatFeed(chatID)})
+	bot.reply(ctx, chatID, threadID, fmt.Sprintf("%s %s (%s)", verb, url, sub.Format))
+	bot.deliverInitialEntries(ctx, url, feed, []store.ChatFeed{sub.ChatFeed(chatID, threadID)})
 }
 
 // deliverInitialEntries delivers the latest initialSendLimit entries
@@ -181,9 +210,9 @@ func (bot *Bot) deliverInitialEntries(ctx context.Context, feedURL string, feed 
 	bot.deliverNew(ctx, feedURL, feed, chats)
 }
 
-func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, args []string) {
+func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, threadID int, args []string) {
 	if len(args) == 0 {
-		bot.reply(ctx, chatID, unsubUsage)
+		bot.reply(ctx, chatID, threadID, unsubUsage)
 		return
 	}
 
@@ -193,31 +222,31 @@ func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, args []string) {
 		url = args[0]
 	}
 
-	existed, err := bot.store.RemoveSub(chatID, url)
+	existed, err := bot.store.RemoveSub(chatID, threadID, url)
 	if err != nil {
 		slog.Error("Failed to remove subscription", "error", err)
-		bot.reply(ctx, chatID, "Failed to unsubscribe.")
+		bot.reply(ctx, chatID, threadID, "Failed to unsubscribe.")
 		return
 	}
 
 	if !existed {
-		bot.reply(ctx, chatID, "Not subscribed to "+url)
+		bot.reply(ctx, chatID, threadID, "Not subscribed to "+url)
 		return
 	}
 
-	bot.reply(ctx, chatID, "Unsubscribed from "+url)
+	bot.reply(ctx, chatID, threadID, "Unsubscribed from "+url)
 }
 
-func (bot *Bot) handleList(ctx context.Context, chatID int64) {
-	subs, err := bot.store.ListSubs(chatID)
+func (bot *Bot) handleList(ctx context.Context, chatID int64, threadID int) {
+	subs, err := bot.store.ListSubs(chatID, threadID)
 	if err != nil {
 		slog.Error("Failed to list subscriptions", "error", err)
-		bot.reply(ctx, chatID, "Failed to list subscriptions.")
+		bot.reply(ctx, chatID, threadID, "Failed to list subscriptions.")
 		return
 	}
 
 	if len(subs) == 0 {
-		bot.reply(ctx, chatID, "No subscriptions.")
+		bot.reply(ctx, chatID, threadID, "No subscriptions.")
 		return
 	}
 
@@ -237,7 +266,7 @@ func (bot *Bot) handleList(ctx context.Context, chatID int64) {
 		b.WriteString("</code>\n")
 	}
 
-	bot.reply(ctx, chatID, b.String())
+	bot.reply(ctx, chatID, threadID, b.String())
 }
 
 // formatSubCommand renders a sub as the /sub line that recreates it.
@@ -261,24 +290,24 @@ func formatSubCommand(sub *store.Sub) string {
 	return b.String()
 }
 
-func (bot *Bot) handleFormat(ctx context.Context, chatID int64, args []string) {
+func (bot *Bot) handleFormat(ctx context.Context, chatID int64, threadID int, args []string) {
 	if len(args) == 0 || !validFormats[args[0]] {
-		bot.reply(ctx, chatID, formatUsage)
+		bot.reply(ctx, chatID, threadID, formatUsage)
 		return
 	}
 
-	count, err := bot.store.SetFormat(chatID, args[0])
+	count, err := bot.store.SetFormat(chatID, threadID, args[0])
 	if err != nil {
 		slog.Error("Failed to set format", "error", err)
-		bot.reply(ctx, chatID, "Failed to set format.")
+		bot.reply(ctx, chatID, threadID, "Failed to set format.")
 		return
 	}
 
-	bot.reply(ctx, chatID, fmt.Sprintf("Updated %d subscription(s) to %s", count, args[0]))
+	bot.reply(ctx, chatID, threadID, fmt.Sprintf("Updated %d subscription(s) to %s", count, args[0]))
 }
 
-func (bot *Bot) reply(ctx context.Context, chatID int64, text string) {
-	if err := bot.tg.SendMessage(ctx, chatID, format.TruncateHTML(text, format.MessageLimit), true); err != nil {
+func (bot *Bot) reply(ctx context.Context, chatID int64, threadID int, text string) {
+	if err := bot.tg.SendMessage(ctx, chatID, threadID, format.TruncateHTML(text, format.MessageLimit), true); err != nil {
 		slog.Error("Failed to send message", "error", err, "chat_id", chatID)
 	}
 }

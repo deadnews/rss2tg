@@ -50,7 +50,7 @@ var (
 	reAnchorPad = regexp.MustCompile(`(<a [^>]*>)\s+|\s+(</a>)`)
 )
 
-// Telegram HTML-mode inline tags we keep. Everything else is stripped.
+// Telegram HTML-mode inline tags to keep. Everything else is stripped.
 var allowedTags = map[string]bool{
 	"a":          true,
 	"b":          true,
