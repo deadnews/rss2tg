@@ -1,10 +1,11 @@
 # Changelog
 
-## [0.0.1-alpha.3](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.3) - 2026-06-11
+## [0.0.1-alpha.4](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.4) - 2026-06-14
 
 ### Features
 
 - _(youtube)_ enrich link entries with video duration and live status - ([d299fde](https://github.com/deadnews/rss2tg/commit/d299fde54055856dfdb69f5475655ed808e79a72))
+- support telegram forum topics - ([40d140e](https://github.com/deadnews/rss2tg/commit/40d140e0bf5c9f02afc3f07e145d886704d348b1))
 - add filter - ([d94e660](https://github.com/deadnews/rss2tg/commit/d94e660572f9361f866ef8029fef0cf6ec238ba1))
 - init - ([133d73e](https://github.com/deadnews/rss2tg/commit/133d73e45dce34c99030aef2c6eb2613477187ff))
 
