@@ -186,6 +186,36 @@ func TestSendMessage(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, int32(2), attempts.Load())
 	})
+
+	t.Run("rejection is a permanent APIError", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{
+				OK: false, Desc: "Bad Request: can't parse entities",
+			})
+		})
+
+		err := c.SendMessage(t.Context(), 100, 0, "<b>bad", false)
+		var apiErr *APIError
+		require.ErrorAs(t, err, &apiErr)
+		assert.Equal(t, "sendMessage", apiErr.Method)
+	})
+
+	t.Run("persistent rate limit stays retryable", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":          false,
+				"description": "Too Many Requests: retry after 1",
+				"parameters":  map[string]any{"retry_after": 1},
+			})
+		})
+
+		err := c.SendMessage(t.Context(), 100, 0, "text", false)
+		require.Error(t, err)
+		var apiErr *APIError
+		assert.NotErrorAs(t, err, &apiErr, "persistent rate limit must not be a permanent APIError")
+	})
 }
 
 func TestCreateForumTopic(t *testing.T) {

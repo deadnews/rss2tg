@@ -57,9 +57,7 @@ func ExtractVideoID(link string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	host := strings.TrimPrefix(u.Host, "www.")
-	host = strings.TrimPrefix(host, "m.")
-	switch host {
+	switch normalizeHost(u.Host) {
 	case "youtube.com":
 		if id := u.Query().Get("v"); id != "" {
 			return id, true

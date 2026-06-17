@@ -115,7 +115,17 @@ func (c *Client) CreateForumTopic(ctx context.Context, chatID int64, name string
 	return topic.MessageThreadID, nil
 }
 
-// postWithRetry POSTs payload, retrying once on 429.
+// APIError is a permanent Telegram rejection.
+type APIError struct {
+	Method string
+	Desc   string
+}
+
+func (e *APIError) Error() string {
+	return e.Method + ": " + e.Desc
+}
+
+// postWithRetry POSTs payload, retrying once on 429; a permanent rejection returns *APIError.
 func (c *Client) postWithRetry(ctx context.Context, method string, payload any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -144,9 +154,12 @@ func (c *Client) postWithRetry(ctx context.Context, method string, payload any) 
 		if result.OK {
 			return nil
 		}
+		if result.Parameters != nil && result.Parameters.RetryAfter > 0 {
+			return fmt.Errorf("%s: %s", method, result.Desc)
+		}
 	}
 
-	return fmt.Errorf("%s: %s", method, result.Desc)
+	return &APIError{Method: method, Desc: result.Desc}
 }
 
 func (c *Client) post(ctx context.Context, method string, body []byte) (*Response[json.RawMessage], error) {

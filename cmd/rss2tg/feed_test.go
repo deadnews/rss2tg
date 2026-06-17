@@ -89,6 +89,10 @@ func newTestBotEnv(t *testing.T) *testBotEnv {
 			"result": map[string]any{"message_thread_id": id, "name": raw.Name},
 		})
 	})
+	mux.HandleFunc("/bottest-token/unpinAllForumTopicMessages", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.NotFound(w, r)
@@ -220,6 +224,49 @@ func TestSubscribeFeedSendsOnlyLatest(t *testing.T) {
 		seen, err := tb.store.IsSeen(feedURL, guid)
 		require.NoError(t, err)
 		assert.True(t, seen, "guid %s should be seen after subscribe", guid)
+	}
+}
+
+func TestCheckFeedsDropsRejectedEntry(t *testing.T) {
+	// A message Telegram permanently rejects must be marked seen, not retried forever.
+	tb := newTestFeedBot(t)
+	tb.mux.HandleFunc("/bottest-token/sendMessage", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": false, "description": "Bad Request: can't parse entities",
+		})
+	})
+
+	feedURL := tb.ts.URL + "/feed.xml"
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: feedURL, Format: "link"})
+	require.NoError(t, err)
+
+	tb.bot.checkFeeds(t.Context())
+
+	for _, guid := range []string{"guid-1", "guid-2"} {
+		seen, err := tb.store.IsSeen(feedURL, guid)
+		require.NoError(t, err)
+		assert.True(t, seen, "rejected guid %s should be marked seen", guid)
+	}
+}
+
+func TestCheckFeedsRetriesTransientFailure(t *testing.T) {
+	// A transient send failure must leave entries unseen so the next cycle retries.
+	tb := newTestFeedBot(t)
+	tb.mux.HandleFunc("/bottest-token/sendMessage", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError) // no JSON body → decode error → transient
+	})
+
+	feedURL := tb.ts.URL + "/feed.xml"
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: feedURL, Format: "link"})
+	require.NoError(t, err)
+
+	tb.bot.checkFeeds(t.Context())
+
+	for _, guid := range []string{"guid-1", "guid-2"} {
+		seen, err := tb.store.IsSeen(feedURL, guid)
+		require.NoError(t, err)
+		assert.False(t, seen, "transient-failed guid %s must not be marked seen", guid)
 	}
 }
 

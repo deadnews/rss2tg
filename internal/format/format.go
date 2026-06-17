@@ -2,6 +2,7 @@
 package format
 
 import (
+	"cmp"
 	"html"
 	"regexp"
 	"strings"
@@ -43,7 +44,7 @@ func Link(item *gofeed.Item, meta string) string {
 // Preview formats an entry with a clickable bold title, sanitized content, and feed attribution.
 func Preview(item *gofeed.Item, feedTitle, feedLink string) string {
 	var b strings.Builder
-	writeBoldTitle(&b, itemTitle(item), item.Link)
+	writeBoldTitle(&b, cmp.Or(item.Title, item.Link), item.Link)
 
 	if excerpt := extractExcerpt(item); excerpt != "" {
 		b.WriteString("\n\n")
@@ -120,13 +121,6 @@ func redditDirectURL(u string) string {
 		return "https://i.redd.it/" + m[1]
 	}
 	return u
-}
-
-func itemTitle(item *gofeed.Item) string {
-	if item.Title != "" {
-		return item.Title
-	}
-	return item.Link
 }
 
 func extractExcerpt(item *gofeed.Item) string {

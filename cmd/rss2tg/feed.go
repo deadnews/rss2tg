@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/deadnews/rss2tg/internal/format"
 	"github.com/deadnews/rss2tg/internal/store"
+	"github.com/deadnews/rss2tg/internal/telegram"
 	"github.com/deadnews/rss2tg/internal/youtube"
 )
 
@@ -51,7 +53,7 @@ func (bot *Bot) deliverNew(ctx context.Context, feedURL string, feed *gofeed.Fee
 		}
 
 		isShort := youtube.IsShort(item.Link)
-		var attempted, delivered bool
+		var delivered, retryable bool
 		for i := range chats {
 			chat := &chats[i]
 			if isShort && !chat.Shorts {
@@ -60,19 +62,23 @@ func (bot *Bot) deliverNew(ctx context.Context, feedURL string, feed *gofeed.Fee
 			if !allow(item.Title, chat.Include, chat.Exclude) {
 				continue
 			}
-			attempted = true
-			if err := bot.sendEntry(ctx, item, feed.Title, feed.Link, chat); err != nil {
+			err := bot.sendEntry(ctx, item, feed.Title, feed.Link, chat)
+			var apiErr *telegram.APIError
+			switch {
+			case err == nil:
+				delivered = true
+			case errors.As(err, &apiErr):
+				slog.Warn("Dropping entry rejected by Telegram",
+					"url", feedURL, "guid", guid, "chat_id", chat.ChatID, "error", err)
+			default:
 				slog.Error("Failed to send entry",
-					"url", feedURL, "guid", guid,
-					"chat_id", chat.ChatID, "error", err,
-				)
-				continue
+					"url", feedURL, "guid", guid, "chat_id", chat.ChatID, "error", err)
+				retryable = true
 			}
-			delivered = true
 		}
 
-		// Skip mark-seen only when every attempt failed (e.g. network), retry next cycle.
-		if attempted && !delivered {
+		// Retry next cycle only when a transient failure left the entry undelivered.
+		if retryable && !delivered {
 			continue
 		}
 		if err := bot.store.MarkSeen(feedURL, guid); err != nil {

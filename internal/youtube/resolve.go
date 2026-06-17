@@ -60,9 +60,13 @@ func ResolveURL(ctx context.Context, raw string) (string, error) {
 }
 
 func isYouTubeHost(host string) bool {
+	return normalizeHost(host) == "youtube.com"
+}
+
+// normalizeHost strips the www. and m. subdomain prefixes.
+func normalizeHost(host string) string {
 	host = strings.TrimPrefix(host, "www.")
-	host = strings.TrimPrefix(host, "m.")
-	return host == "youtube.com"
+	return strings.TrimPrefix(host, "m.")
 }
 
 func isHandlePath(path string) bool {
