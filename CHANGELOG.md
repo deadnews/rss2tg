@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.0.1-alpha.4](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.4) - 2026-06-14
+## [0.0.1-alpha.5](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.5) - 2026-06-17
 
 ### Features
 
@@ -11,6 +11,8 @@
 
 ### Bug fixes
 
+- support telegram forum topics - ([c9a9fac](https://github.com/deadnews/rss2tg/commit/c9a9facfeae126ea98b7ddb54631cf8c61e97fa4))
+- drop telegram-rejected feed entries instead of retrying - ([6386375](https://github.com/deadnews/rss2tg/commit/63863753164851935bc093fd85fa5bb537bb4ea2))
 - truncate messages to telegram limits - ([afc9ca4](https://github.com/deadnews/rss2tg/commit/afc9ca46068daa06ed4c3dc81ae7bbfb3f774ff0))
 - cap seen entries by feed length - ([730961b](https://github.com/deadnews/rss2tg/commit/730961b6db326265c5489a045f84cf166195498d))
 - change `link` format - ([7b87a05](https://github.com/deadnews/rss2tg/commit/7b87a05018df3d12d078a014caa5a8dd2b408a1a))
