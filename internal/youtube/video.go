@@ -32,6 +32,11 @@ type VideoInfo struct {
 	ScheduledStart time.Time // zero unless LiveStatus == "upcoming"
 }
 
+// IsStream reports whether the video is a live or upcoming stream.
+func (v *VideoInfo) IsStream() bool {
+	return v.LiveStatus == "live" || v.LiveStatus == "upcoming"
+}
+
 // MetaLine renders duration, scheduled time, or LIVE tag.
 func (v *VideoInfo) MetaLine() string {
 	switch v.LiveStatus {

@@ -29,6 +29,7 @@ type Sub struct {
 	Title   string   `json:"title,omitempty"`
 	Format  string   `json:"format"`
 	Shorts  bool     `json:"shorts,omitempty"`
+	NoLive  bool     `json:"nolive,omitempty"`
 	Exclude []string `json:"exclude,omitempty"`
 	Include []string `json:"include,omitempty"`
 }
@@ -190,6 +191,7 @@ type ChatFeed struct {
 	ThreadID int
 	Format   string
 	Shorts   bool
+	NoLive   bool
 	Exclude  []string
 	Include  []string
 }
@@ -201,6 +203,7 @@ func (sub *Sub) ChatFeed(chatID int64, threadID int) ChatFeed {
 		ThreadID: threadID,
 		Format:   sub.Format,
 		Shorts:   sub.Shorts,
+		NoLive:   sub.NoLive,
 		Exclude:  sub.Exclude,
 		Include:  sub.Include,
 	}

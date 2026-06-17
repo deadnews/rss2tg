@@ -108,6 +108,19 @@ func TestVideoInfoMetaLine(t *testing.T) {
 	})
 }
 
+func TestVideoInfoIsStream(t *testing.T) {
+	tests := map[string]bool{
+		"live":     true,
+		"upcoming": true,
+		"none":     false,
+		"":         false,
+	}
+	for status, want := range tests {
+		v := &VideoInfo{LiveStatus: status}
+		assert.Equal(t, want, v.IsStream(), status)
+	}
+}
+
 func TestFetchVideoInfo(t *testing.T) {
 	const regularResp = `{"items":[{
 		"snippet":{"liveBroadcastContent":"none"},

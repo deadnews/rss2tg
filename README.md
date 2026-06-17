@@ -29,18 +29,20 @@ docker pull ghcr.io/deadnews/rss2tg
 
 ## Commands
 
-| Command                                                                | Description                         |
-| ---------------------------------------------------------------------- | ----------------------------------- |
-| `/sub <url> [link\|pw\|text] [shorts] [exclude:w1,w2] [include:w1,w2]` | Subscribe current chat to feed      |
-| `/unsub <url>`                                                         | Unsubscribe from feed               |
-| `/list`                                                                | List subscriptions (copy-pasteable) |
-| `/format <link\|pw\|text>`                                             | Change format for all chat subs     |
-| `/help`                                                                | Show available commands             |
+| Command                                                                         | Description                         |
+| ------------------------------------------------------------------------------- | ----------------------------------- |
+| `/sub <url> [link\|pw\|text] [shorts] [nolive] [exclude:w1,w2] [include:w1,w2]` | Subscribe current chat to feed      |
+| `/unsub <url>`                                                                  | Unsubscribe from feed               |
+| `/list`                                                                         | List subscriptions (copy-pasteable) |
+| `/format <link\|pw\|text>`                                                      | Change format for all chat subs     |
+| `/help`                                                                         | Show available commands             |
 
 New subscribers receive the 3 latest entries; the rest are marked seen.
 
 YouTube channel URLs auto-resolve to their Atom feed on `/sub`.
 Shorts are filtered by default — append `shorts` to include them.
+Live streams are included by default — append `nolive` to filter
+them out (requires a YouTube API key).
 
 Title filters match whole words case-insensitively. Exclude wins over include.
 Re-running `/sub` for an existing URL replaces its options (`/list` prints each

@@ -53,16 +53,26 @@ func (bot *Bot) deliverNew(ctx context.Context, feedURL string, feed *gofeed.Fee
 		}
 
 		isShort := youtube.IsShort(item.Link)
+		info := bot.videoInfo(ctx, item.Link)
+		isLive := info != nil && info.IsStream()
+		var meta string
+		if info != nil {
+			meta = info.MetaLine()
+		}
+
 		var delivered, retryable bool
 		for i := range chats {
 			chat := &chats[i]
 			if isShort && !chat.Shorts {
 				continue
 			}
+			if isLive && chat.NoLive {
+				continue
+			}
 			if !allow(item.Title, chat.Include, chat.Exclude) {
 				continue
 			}
-			err := bot.sendEntry(ctx, item, feed.Title, feed.Link, chat)
+			err := bot.sendEntry(ctx, item, feed.Title, feed.Link, meta, chat)
 			var apiErr *telegram.APIError
 			switch {
 			case err == nil:
@@ -87,7 +97,7 @@ func (bot *Bot) deliverNew(ctx context.Context, feedURL string, feed *gofeed.Fee
 	}
 }
 
-func (bot *Bot) sendEntry(ctx context.Context, item *gofeed.Item, feedTitle, feedLink string, chat *store.ChatFeed) error {
+func (bot *Bot) sendEntry(ctx context.Context, item *gofeed.Item, feedTitle, feedLink, meta string, chat *store.ChatFeed) error {
 	var err error
 	switch chat.Format {
 	case formatPreview:
@@ -102,7 +112,7 @@ func (bot *Bot) sendEntry(ctx context.Context, item *gofeed.Item, feedTitle, fee
 	case formatText:
 		err = bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, format.TruncateHTML(format.Text(item), format.MessageLimit), true)
 	default:
-		text := format.Link(item, bot.youtubeMeta(ctx, item.Link))
+		text := format.Link(item, meta)
 		err = bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, format.TruncateHTML(text, format.MessageLimit), false)
 	}
 	if err != nil {
@@ -111,22 +121,22 @@ func (bot *Bot) sendEntry(ctx context.Context, item *gofeed.Item, feedTitle, fee
 	return nil
 }
 
-// youtubeMeta returns the YouTube meta line, or empty on missing key,
-// non-YouTube link, or API error (entry then sends unenriched).
-func (bot *Bot) youtubeMeta(ctx context.Context, link string) string {
+// videoInfo fetches YouTube metadata for a link, or nil on missing key,
+// non-YouTube link, or API error (the entry then sends unenriched).
+func (bot *Bot) videoInfo(ctx context.Context, link string) *youtube.VideoInfo {
 	if bot.cfg.YouTubeKey == "" {
-		return ""
+		return nil
 	}
 	id, ok := youtube.ExtractVideoID(link)
 	if !ok {
-		return ""
+		return nil
 	}
 	info, err := youtube.FetchVideoInfo(ctx, bot.cfg.YouTubeKey, id)
 	if err != nil {
 		slog.Warn("YouTube enrichment failed", "id", id, "error", err)
-		return ""
+		return nil
 	}
-	return info.MetaLine()
+	return info
 }
 
 func itemGUID(item *gofeed.Item) string {

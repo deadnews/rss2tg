@@ -32,13 +32,13 @@ var validFormats = map[string]bool{
 
 const helpText = `<b>Available commands:</b>
 
-<code>/sub &lt;url&gt; [link|pw|text] [shorts] [exclude:w1,w2] [include:w1,w2]</code> — subscribe to feed
+<code>/sub &lt;url&gt; [link|pw|text] [shorts] [nolive] [exclude:w1,w2] [include:w1,w2]</code> — subscribe to feed
 <code>/unsub &lt;url&gt;</code> — unsubscribe from feed
 <code>/list</code> — list subscriptions
 <code>/format &lt;link|pw|text&gt;</code> — change format for all subs
 <code>/help</code> — show this message
 
-YouTube channel URLs are auto-resolved to their Atom feed. YouTube Shorts are filtered by default; pass <code>shorts</code> to include them.
+YouTube channel URLs are auto-resolved to their Atom feed. YouTube Shorts are filtered by default; pass <code>shorts</code> to include them. Live streams are included by default; pass <code>nolive</code> to filter them out.
 
 In a forum group, <code>/sub</code> from the General topic creates a topic per feed; run it inside a topic to subscribe there.
 
@@ -84,7 +84,7 @@ func (bot *Bot) handleCommand(ctx context.Context, msg *telegram.Message) {
 }
 
 const (
-	subUsage    = "Usage: /sub &lt;url&gt; [link|pw|text] [shorts] [exclude:w1,w2] [include:w1,w2]"
+	subUsage    = "Usage: /sub &lt;url&gt; [link|pw|text] [shorts] [nolive] [exclude:w1,w2] [include:w1,w2]"
 	unsubUsage  = "Usage: /unsub &lt;url&gt;"
 	formatUsage = "Usage: /format &lt;link|pw|text&gt;"
 )
@@ -98,6 +98,7 @@ const (
 type parsedSubArgs struct {
 	format  string
 	shorts  bool
+	noLive  bool
 	exclude []string
 	include []string
 }
@@ -109,6 +110,8 @@ func parseSubArgs(args []string) (parsedSubArgs, bool) {
 		switch {
 		case arg == "shorts":
 			out.shorts = true
+		case arg == "nolive":
+			out.noLive = true
 		case validFormats[arg]:
 			out.format = arg
 		case strings.HasPrefix(arg, prefixExclude):
@@ -169,6 +172,7 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, threadID int, isFor
 		Title:   feed.Title,
 		Format:  opts.format,
 		Shorts:  opts.shorts,
+		NoLive:  opts.noLive,
 		Exclude: opts.exclude,
 		Include: opts.include,
 	}
@@ -300,6 +304,9 @@ func formatSubCommand(sub *store.Sub) string {
 	b.WriteString(sub.Format)
 	if sub.Shorts {
 		b.WriteString(" shorts")
+	}
+	if sub.NoLive {
+		b.WriteString(" nolive")
 	}
 	if len(sub.Exclude) > 0 {
 		b.WriteString(" exclude:")

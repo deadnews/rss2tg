@@ -495,10 +495,11 @@ func TestParseSubArgs(t *testing.T) {
 		},
 		{
 			name: "all options any order",
-			args: []string{"include:go,rust", "shorts", "exclude:Crypto,AI", "pw"},
+			args: []string{"include:go,rust", "shorts", "nolive", "exclude:Crypto,AI", "pw"},
 			want: parsedSubArgs{
 				format:  "pw",
 				shorts:  true,
+				noLive:  true,
 				exclude: []string{"crypto", "ai"},
 				include: []string{"go", "rust"},
 			},
@@ -573,6 +574,7 @@ func TestHandleListRendersFilters(t *testing.T) {
 		Title:   "Feed A",
 		Format:  "pw",
 		Shorts:  true,
+		NoLive:  true,
 		Exclude: []string{"crypto"},
 		Include: []string{"go", "rust"},
 	})
@@ -587,5 +589,5 @@ func TestHandleListRendersFilters(t *testing.T) {
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
 	assert.Contains(t, sent[0].Text,
-		"<code>/sub https://a.com/feed pw shorts exclude:crypto include:go,rust</code>")
+		"<code>/sub https://a.com/feed pw shorts nolive exclude:crypto include:go,rust</code>")
 }
