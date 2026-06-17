@@ -108,19 +108,6 @@ func TestVideoInfoMetaLine(t *testing.T) {
 	})
 }
 
-func TestVideoInfoIsStream(t *testing.T) {
-	tests := map[string]bool{
-		"live":     true,
-		"upcoming": true,
-		"none":     false,
-		"":         false,
-	}
-	for status, want := range tests {
-		v := &VideoInfo{LiveStatus: status}
-		assert.Equal(t, want, v.IsStream(), status)
-	}
-}
-
 func TestFetchVideoInfo(t *testing.T) {
 	const regularResp = `{"items":[{
 		"snippet":{"liveBroadcastContent":"none"},
@@ -135,6 +122,12 @@ func TestFetchVideoInfo(t *testing.T) {
 		"snippet":{"liveBroadcastContent":"upcoming"},
 		"contentDetails":{"duration":"P0D"},
 		"liveStreamingDetails":{"scheduledStartTime":"2026-05-25T18:00:00Z"}
+	}]}`
+	// Finished stream: reports "none" like a normal upload, but keeps liveStreamingDetails.
+	const endedResp = `{"items":[{
+		"snippet":{"liveBroadcastContent":"none"},
+		"contentDetails":{"duration":"PT1H2M3S"},
+		"liveStreamingDetails":{"scheduledStartTime":"2026-05-23T23:00:00Z","actualEndTime":"2026-05-24T01:02:03Z"}
 	}]}`
 	const emptyResp = `{"items":[]}`
 
@@ -160,6 +153,7 @@ func TestFetchVideoInfo(t *testing.T) {
 			assert.Equal(t, "none", info.LiveStatus)
 			assert.Equal(t, 21*time.Minute+3*time.Second, info.Duration)
 			assert.True(t, info.ScheduledStart.IsZero())
+			assert.False(t, info.IsStream())
 		})
 	})
 
@@ -168,6 +162,7 @@ func TestFetchVideoInfo(t *testing.T) {
 			info, err := FetchVideoInfo(t.Context(), "test-key", "abc")
 			require.NoError(t, err)
 			assert.Equal(t, "live", info.LiveStatus)
+			assert.True(t, info.IsStream())
 		})
 	})
 
@@ -179,6 +174,16 @@ func TestFetchVideoInfo(t *testing.T) {
 			assert.Equal(t,
 				time.Date(2026, 5, 25, 18, 0, 0, 0, time.UTC),
 				info.ScheduledStart.UTC())
+			assert.True(t, info.IsStream())
+		})
+	})
+
+	t.Run("finished stream", func(t *testing.T) {
+		withServer(t, endedResp, func() {
+			info, err := FetchVideoInfo(t.Context(), "test-key", "abc")
+			require.NoError(t, err)
+			assert.Equal(t, "none", info.LiveStatus)
+			assert.True(t, info.IsStream(), "an ended broadcast is still a stream")
 		})
 	})
 

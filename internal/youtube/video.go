@@ -30,11 +30,12 @@ type VideoInfo struct {
 	Duration       time.Duration
 	LiveStatus     string    // "none" | "upcoming" | "live"
 	ScheduledStart time.Time // zero unless LiveStatus == "upcoming"
+	Stream         bool      // a broadcast
 }
 
-// IsStream reports whether the video is a live or upcoming stream.
+// IsStream reports whether the video is a broadcast.
 func (v *VideoInfo) IsStream() bool {
-	return v.LiveStatus == "live" || v.LiveStatus == "upcoming"
+	return v.Stream
 }
 
 // MetaLine renders duration, scheduled time, or LIVE tag.
@@ -111,7 +112,7 @@ func FetchVideoInfo(ctx context.Context, apiKey, videoID string) (*VideoInfo, er
 			ContentDetails struct {
 				Duration string `json:"duration"`
 			} `json:"contentDetails"`
-			LiveStreamingDetails struct {
+			LiveStreamingDetails *struct {
 				ScheduledStartTime time.Time `json:"scheduledStartTime"`
 			} `json:"liveStreamingDetails"`
 		} `json:"items"`
@@ -124,11 +125,15 @@ func FetchVideoInfo(ctx context.Context, apiKey, videoID string) (*VideoInfo, er
 	}
 
 	item := body.Items[0]
-	return &VideoInfo{
-		Duration:       parseISODuration(item.ContentDetails.Duration),
-		LiveStatus:     item.Snippet.LiveBroadcastContent,
-		ScheduledStart: item.LiveStreamingDetails.ScheduledStartTime,
-	}, nil
+	info := &VideoInfo{
+		Duration:   parseISODuration(item.ContentDetails.Duration),
+		LiveStatus: item.Snippet.LiveBroadcastContent,
+	}
+	if d := item.LiveStreamingDetails; d != nil {
+		info.Stream = true
+		info.ScheduledStart = d.ScheduledStartTime
+	}
+	return info, nil
 }
 
 func parseISODuration(s string) time.Duration {
