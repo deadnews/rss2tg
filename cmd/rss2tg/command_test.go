@@ -160,16 +160,21 @@ func TestHandleSubInForumGeneralCreatesTopic(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, general)
 
-	// The feed lives in the new topic and the reply landed there.
+	// The feed lives in the new topic.
 	feeds, err := tb.store.AllFeeds()
 	require.NoError(t, err)
 	require.Len(t, feeds[feedURL], 1)
 	thread := feeds[feedURL][0].ThreadID
 	assert.NotZero(t, thread)
 
+	// General gets a "Created topic" notice; the topic gets the subscription confirmation.
 	sent := tb.getSent()
-	require.NotEmpty(t, sent)
-	assert.Equal(t, thread, sent[0].ThreadID)
+	require.Len(t, sent, 2)
+	assert.Equal(t, 0, sent[0].ThreadID)
+	assert.Contains(t, sent[0].Text, "Created topic")
+	assert.Contains(t, sent[0].Text, "Command Test Feed")
+	assert.Equal(t, thread, sent[1].ThreadID)
+	assert.Contains(t, sent[1].Text, "Subscribed")
 }
 
 func TestHandleSubInForumGeneralReusesTopic(t *testing.T) {
@@ -362,6 +367,48 @@ func TestHandleList(t *testing.T) {
 	require.Len(t, sent, 1)
 	assert.Contains(t, sent[0].Text, "https://a.com/feed")
 	assert.Contains(t, sent[0].Text, "https://b.com/feed")
+}
+
+func TestHandleListFromForumGeneralAggregates(t *testing.T) {
+	tb := newTestCmdBot(t)
+
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: "https://a.com/feed", Format: "link"})
+	require.NoError(t, err)
+	_, err = tb.store.AddSub(100, 5, &store.Sub{URL: "https://b.com/feed", Format: "pw"})
+	require.NoError(t, err)
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 100, IsForum: true},
+		Text: "/list",
+	})
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "https://a.com/feed")
+	assert.Contains(t, sent[0].Text, "https://b.com/feed")
+}
+
+func TestHandleListFromForumTopicStaysScoped(t *testing.T) {
+	tb := newTestCmdBot(t)
+
+	_, err := tb.store.AddSub(100, 5, &store.Sub{URL: "https://a.com/feed", Format: "link"})
+	require.NoError(t, err)
+	_, err = tb.store.AddSub(100, 9, &store.Sub{URL: "https://b.com/feed", Format: "pw"})
+	require.NoError(t, err)
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From:            &telegram.User{ID: 42},
+		Chat:            telegram.Chat{ID: 100, IsForum: true},
+		MessageThreadID: 5,
+		IsTopicMessage:  true,
+		Text:            "/list",
+	})
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "https://a.com/feed")
+	assert.NotContains(t, sent[0].Text, "https://b.com/feed")
 }
 
 func TestHandleListEmpty(t *testing.T) {

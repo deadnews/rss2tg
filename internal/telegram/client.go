@@ -115,6 +115,14 @@ func (c *Client) CreateForumTopic(ctx context.Context, chatID int64, name string
 	return topic.MessageThreadID, nil
 }
 
+// UnpinAllForumTopicMessages clears a topic's pinned messages.
+func (c *Client) UnpinAllForumTopicMessages(ctx context.Context, chatID int64, threadID int) error {
+	return c.postWithRetry(ctx, "unpinAllForumTopicMessages", unpinAllForumTopicMessagesRequest{
+		ChatID:          chatID,
+		MessageThreadID: threadID,
+	})
+}
+
 // APIError is a permanent Telegram rejection.
 type APIError struct {
 	Method string

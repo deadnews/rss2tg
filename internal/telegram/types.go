@@ -70,3 +70,8 @@ type createForumTopicRequest struct {
 	ChatID int64  `json:"chat_id"`
 	Name   string `json:"name"`
 }
+
+type unpinAllForumTopicMessagesRequest struct {
+	ChatID          int64 `json:"chat_id"`
+	MessageThreadID int   `json:"message_thread_id"`
+}

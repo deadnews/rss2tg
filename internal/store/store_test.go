@@ -171,6 +171,34 @@ func TestSubsIsolatedPerThread(t *testing.T) {
 	assert.Equal(t, map[int]bool{0: true, 5: true}, threads)
 }
 
+func TestChatSubs(t *testing.T) {
+	s := testStore(t)
+
+	_, err := s.AddSub(100, 0, &Sub{URL: "https://general.com/feed", Format: "link"})
+	require.NoError(t, err)
+	_, err = s.AddSub(100, 5, &Sub{URL: "https://a.com/feed", Format: "pw"})
+	require.NoError(t, err)
+	_, err = s.AddSub(100, 9, &Sub{URL: "https://b.com/feed", Format: "link"})
+	require.NoError(t, err)
+	// A different chat must be excluded.
+	_, err = s.AddSub(200, 0, &Sub{URL: "https://other.com/feed", Format: "link"})
+	require.NoError(t, err)
+
+	subs, err := s.ChatSubs(100)
+	require.NoError(t, err)
+	require.Len(t, subs, 3)
+
+	urls := make(map[string]bool)
+	for _, sub := range subs {
+		urls[sub.URL] = true
+	}
+	assert.Equal(t, map[string]bool{
+		"https://general.com/feed": true,
+		"https://a.com/feed":       true,
+		"https://b.com/feed":       true,
+	}, urls)
+}
+
 func TestFindFeedThread(t *testing.T) {
 	s := testStore(t)
 

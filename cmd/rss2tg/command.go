@@ -77,7 +77,7 @@ func (bot *Bot) handleCommand(ctx context.Context, msg *telegram.Message) {
 	case "/unsub":
 		bot.handleUnsub(ctx, msg.Chat.ID, threadID, parts[1:])
 	case "/list":
-		bot.handleList(ctx, msg.Chat.ID, threadID)
+		bot.handleList(ctx, msg.Chat.ID, threadID, msg.Chat.IsForum)
 	case "/format":
 		bot.handleFormat(ctx, msg.Chat.ID, threadID, parts[1:])
 	}
@@ -156,23 +156,11 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, threadID int, isFor
 		return
 	}
 
-	// In a forum's General topic, give each feed its own topic, reusing the
-	// feed's existing topic or creating one named after the feed.
+	// In a forum's General topic, give each feed its own topic.
 	if isForum && threadID == 0 {
-		existing, found, ferr := bot.store.FindFeedThread(chatID, url)
-		if ferr != nil {
-			slog.Error("Failed to find feed thread", "chat_id", chatID, "error", ferr)
-			bot.reply(ctx, chatID, 0, "Failed to subscribe.")
+		var ok bool
+		if threadID, ok = bot.forumTopicFor(ctx, chatID, url, feed.Title); !ok {
 			return
-		}
-		threadID = existing
-		if !found {
-			threadID, err = bot.tg.CreateForumTopic(ctx, chatID, cmp.Or(feed.Title, url))
-			if err != nil {
-				slog.Error("Failed to create forum topic", "chat_id", chatID, "error", err)
-				bot.reply(ctx, chatID, 0, "Failed to create topic. The bot must be an admin with Manage Topics.")
-				return
-			}
 		}
 	}
 
@@ -197,6 +185,33 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, threadID int, isFor
 	}
 	bot.reply(ctx, chatID, threadID, fmt.Sprintf("%s %s (%s)", verb, url, sub.Format))
 	bot.deliverInitialEntries(ctx, url, feed, []store.ChatFeed{sub.ChatFeed(chatID, threadID)})
+}
+
+// forumTopicFor returns the feed's existing topic or creates one named after it.
+func (bot *Bot) forumTopicFor(ctx context.Context, chatID int64, feedURL, title string) (threadID int, ok bool) {
+	existing, found, err := bot.store.FindFeedThread(chatID, feedURL)
+	if err != nil {
+		slog.Error("Failed to find feed thread", "chat_id", chatID, "error", err)
+		bot.reply(ctx, chatID, 0, "Failed to subscribe.")
+		return 0, false
+	}
+	if found {
+		return existing, true
+	}
+
+	name := cmp.Or(title, feedURL)
+	threadID, err = bot.tg.CreateForumTopic(ctx, chatID, name)
+	if err != nil {
+		slog.Error("Failed to create forum topic", "chat_id", chatID, "error", err)
+		bot.reply(ctx, chatID, 0, "Failed to create topic. The bot must be an admin with Manage Topics.")
+		return 0, false
+	}
+	// Telegram auto-pins the topic-creation message; clear it.
+	if err := bot.tg.UnpinAllForumTopicMessages(ctx, chatID, threadID); err != nil {
+		slog.Warn("Failed to unpin topic creation message", "chat_id", chatID, "thread_id", threadID, "error", err)
+	}
+	bot.reply(ctx, chatID, 0, fmt.Sprintf("Created topic <b>%s</b>", html.EscapeString(name)))
+	return threadID, true
 }
 
 // deliverInitialEntries delivers the latest initialSendLimit entries
@@ -237,8 +252,15 @@ func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, threadID int, arg
 	bot.reply(ctx, chatID, threadID, "Unsubscribed from "+url)
 }
 
-func (bot *Bot) handleList(ctx context.Context, chatID int64, threadID int) {
-	subs, err := bot.store.ListSubs(chatID, threadID)
+func (bot *Bot) handleList(ctx context.Context, chatID int64, threadID int, isForum bool) {
+	var subs []store.Sub
+	var err error
+	// From a forum's General topic, list every topic's subs.
+	if isForum && threadID == 0 {
+		subs, err = bot.store.ChatSubs(chatID)
+	} else {
+		subs, err = bot.store.ListSubs(chatID, threadID)
+	}
 	if err != nil {
 		slog.Error("Failed to list subscriptions", "error", err)
 		bot.reply(ctx, chatID, threadID, "Failed to list subscriptions.")

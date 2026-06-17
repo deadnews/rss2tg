@@ -267,6 +267,37 @@ func TestCreateForumTopic(t *testing.T) {
 	})
 }
 
+func TestUnpinAllForumTopicMessages(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, http.MethodPost, r.Method)
+			assert.Contains(t, r.URL.Path, "/unpinAllForumTopicMessages")
+
+			var payload unpinAllForumTopicMessagesRequest
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			assert.Equal(t, int64(100), payload.ChatID)
+			assert.Equal(t, 7, payload.MessageThreadID)
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: true})
+		})
+
+		err := c.UnpinAllForumTopicMessages(t.Context(), 100, 7)
+		require.NoError(t, err)
+	})
+
+	t.Run("error response", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: false, Desc: "not enough rights"})
+		})
+
+		err := c.UnpinAllForumTopicMessages(t.Context(), 100, 7)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not enough rights")
+	})
+}
+
 func TestSendPhoto(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		c := testClient(t, func(w http.ResponseWriter, r *http.Request) {

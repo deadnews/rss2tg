@@ -235,6 +235,34 @@ func (s *Store) AllFeeds() (map[string][]ChatFeed, error) {
 	return feeds, nil
 }
 
+// ChatSubs returns all subscriptions across every topic of a chat.
+func (s *Store) ChatSubs(chatID int64) ([]Sub, error) {
+	prefix := chatKey(chatID, 0) // shared 8-byte chat prefix across the chat's topics
+	var subs []Sub
+	err := s.db.View(func(tx *bolt.Tx) error {
+		buckets := tx.Bucket(bucketSubs)
+		return buckets.ForEach(func(k, _ []byte) error {
+			if !bytes.HasPrefix(k, prefix) {
+				return nil
+			}
+			chat := buckets.Bucket(k)
+			if chat == nil {
+				return nil
+			}
+			topicSubs, err := collectSubs(chat)
+			if err != nil {
+				return err
+			}
+			subs = append(subs, topicSubs...)
+			return nil
+		})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing chat subscriptions: %w", err)
+	}
+	return subs, nil
+}
+
 // FindFeedThread returns the topic a feed is subscribed under in a chat, if any.
 func (s *Store) FindFeedThread(chatID int64, feedURL string) (threadID int, found bool, err error) {
 	prefix := chatKey(chatID, 0) // shared 8-byte chat prefix across the chat's topics
