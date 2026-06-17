@@ -1,16 +1,18 @@
 # Changelog
 
-## [0.0.1-alpha.5](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.5) - 2026-06-17
+## [0.0.1-alpha.6](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.6) - 2026-06-17
 
 ### Features
 
 - _(youtube)_ enrich link entries with video duration and live status - ([d299fde](https://github.com/deadnews/rss2tg/commit/d299fde54055856dfdb69f5475655ed808e79a72))
+- add `nolive` flag to filter youtube live streams - ([49c5b99](https://github.com/deadnews/rss2tg/commit/49c5b992ef41f937d0670941662cbe318b008d9c))
 - support telegram forum topics - ([40d140e](https://github.com/deadnews/rss2tg/commit/40d140e0bf5c9f02afc3f07e145d886704d348b1))
 - add filter - ([d94e660](https://github.com/deadnews/rss2tg/commit/d94e660572f9361f866ef8029fef0cf6ec238ba1))
 - init - ([133d73e](https://github.com/deadnews/rss2tg/commit/133d73e45dce34c99030aef2c6eb2613477187ff))
 
 ### Bug fixes
 
+- clear auto-pinned forum topic-creation message - ([e78e575](https://github.com/deadnews/rss2tg/commit/e78e5750ef48f462e1e05645df7060b57c5e2742))
 - support telegram forum topics - ([c9a9fac](https://github.com/deadnews/rss2tg/commit/c9a9facfeae126ea98b7ddb54631cf8c61e97fa4))
 - drop telegram-rejected feed entries instead of retrying - ([6386375](https://github.com/deadnews/rss2tg/commit/63863753164851935bc093fd85fa5bb537bb4ea2))
 - truncate messages to telegram limits - ([afc9ca4](https://github.com/deadnews/rss2tg/commit/afc9ca46068daa06ed4c3dc81ae7bbfb3f774ff0))
