@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.0.1-alpha.6](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.6) - 2026-06-17
+## [0.0.1-alpha.7](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.7) - 2026-06-17
 
 ### Features
 
@@ -12,6 +12,7 @@
 
 ### Bug fixes
 
+- filter finished youtube streams under `nolive` - ([6713dc9](https://github.com/deadnews/rss2tg/commit/6713dc9d50574f0fd76bdd168ddc95252ec528f9))
 - clear auto-pinned forum topic-creation message - ([e78e575](https://github.com/deadnews/rss2tg/commit/e78e5750ef48f462e1e05645df7060b57c5e2742))
 - support telegram forum topics - ([c9a9fac](https://github.com/deadnews/rss2tg/commit/c9a9facfeae126ea98b7ddb54631cf8c61e97fa4))
 - drop telegram-rejected feed entries instead of retrying - ([6386375](https://github.com/deadnews/rss2tg/commit/63863753164851935bc093fd85fa5bb537bb4ea2))
