@@ -53,12 +53,19 @@ type sentMessage struct {
 	Text     string
 }
 
+// unpinCall captures an unpinAllForumTopicMessages request.
+type unpinCall struct {
+	ChatID   int64
+	ThreadID int
+}
+
 type testBotEnv struct {
 	bot    *Bot
 	store  *store.Store
 	mu     *sync.Mutex
 	sent   *[]sentMessage
 	topics *[]string
+	unpins *[]unpinCall
 	ts     *httptest.Server
 	mux    *http.ServeMux
 }
@@ -71,6 +78,7 @@ func newTestBotEnv(t *testing.T) *testBotEnv {
 	var mu sync.Mutex
 	var sent []sentMessage
 	var topics []string
+	var unpins []unpinCall
 
 	mux := http.NewServeMux()
 	// createForumTopic returns a synthetic thread ID and records the topic name.
@@ -89,7 +97,15 @@ func newTestBotEnv(t *testing.T) *testBotEnv {
 			"result": map[string]any{"message_thread_id": id, "name": raw.Name},
 		})
 	})
-	mux.HandleFunc("/bottest-token/unpinAllForumTopicMessages", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/bottest-token/unpinAllForumTopicMessages", func(w http.ResponseWriter, r *http.Request) {
+		var raw struct {
+			ChatID          int64 `json:"chat_id"`
+			MessageThreadID int   `json:"message_thread_id"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&raw)
+		mu.Lock()
+		unpins = append(unpins, unpinCall{ChatID: raw.ChatID, ThreadID: raw.MessageThreadID})
+		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
@@ -128,7 +144,7 @@ func newTestBotEnv(t *testing.T) *testBotEnv {
 
 	bot := NewBot(&Config{Manager: 42}, tg, st)
 
-	return &testBotEnv{bot: bot, store: st, mu: &mu, sent: &sent, topics: &topics, ts: ts, mux: mux}
+	return &testBotEnv{bot: bot, store: st, mu: &mu, sent: &sent, topics: &topics, unpins: &unpins, ts: ts, mux: mux}
 }
 
 // serveXML registers a static XML handler on the env's mux.
@@ -155,6 +171,12 @@ func (tb *testBotEnv) getTopics() []string {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	return append([]string(nil), *tb.topics...)
+}
+
+func (tb *testBotEnv) getUnpins() []unpinCall {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	return append([]unpinCall(nil), *tb.unpins...)
 }
 
 func newTestFeedBot(t *testing.T) *testBotEnv {

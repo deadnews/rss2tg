@@ -18,13 +18,19 @@ type ForumTopic struct {
 	Name            string `json:"name"`
 }
 
+// ForumTopicCreated is the service payload of a topic-creation message.
+type ForumTopicCreated struct {
+	Name string `json:"name"`
+}
+
 // Message represents a Telegram message.
 type Message struct {
-	From            *User  `json:"from"`
-	Chat            Chat   `json:"chat"`
-	Text            string `json:"text"`
-	MessageThreadID int    `json:"message_thread_id"`
-	IsTopicMessage  bool   `json:"is_topic_message"`
+	From              *User              `json:"from"`
+	Chat              Chat               `json:"chat"`
+	Text              string             `json:"text"`
+	MessageThreadID   int                `json:"message_thread_id"`
+	IsTopicMessage    bool               `json:"is_topic_message"`
+	ForumTopicCreated *ForumTopicCreated `json:"forum_topic_created"`
 }
 
 // Update represents a Telegram update.

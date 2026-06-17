@@ -210,12 +210,18 @@ func (bot *Bot) forumTopicFor(ctx context.Context, chatID int64, feedURL, title 
 		bot.reply(ctx, chatID, 0, "Failed to create topic. The bot must be an admin with Manage Topics.")
 		return 0, false
 	}
-	// Telegram auto-pins the topic-creation message; clear it.
-	if err := bot.tg.UnpinAllForumTopicMessages(ctx, chatID, threadID); err != nil {
-		slog.Warn("Failed to unpin topic creation message", "chat_id", chatID, "thread_id", threadID, "error", err)
-	}
+	// The auto-pinned creation message is cleared reactively in clearTopicCreationPin.
 	bot.reply(ctx, chatID, 0, fmt.Sprintf("Created topic <b>%s</b>", html.EscapeString(name)))
 	return threadID, true
+}
+
+// clearTopicCreationPin removes the topic-creation service message
+// that Telegram auto-pins whenever a forum topic is created.
+func (bot *Bot) clearTopicCreationPin(ctx context.Context, msg *telegram.Message) {
+	if err := bot.tg.UnpinAllForumTopicMessages(ctx, msg.Chat.ID, msg.MessageThreadID); err != nil {
+		slog.Warn("Failed to unpin topic creation message",
+			"chat_id", msg.Chat.ID, "thread_id", msg.MessageThreadID, "error", err)
+	}
 }
 
 // deliverInitialEntries delivers the latest initialSendLimit entries

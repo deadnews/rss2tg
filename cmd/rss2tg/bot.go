@@ -89,11 +89,21 @@ func (bot *Bot) pollUpdates(ctx context.Context) {
 				msg = u.ChannelPost
 			}
 			if msg != nil {
-				bot.handleCommand(ctx, msg)
+				bot.routeMessage(ctx, msg)
 			}
 			offset = u.UpdateID + 1
 		}
 	}
+}
+
+// routeMessage clears the auto-pin on forum topic-creation messages;
+// everything else is handled as a command.
+func (bot *Bot) routeMessage(ctx context.Context, msg *telegram.Message) {
+	if msg.ForumTopicCreated != nil {
+		bot.clearTopicCreationPin(ctx, msg)
+		return
+	}
+	bot.handleCommand(ctx, msg)
 }
 
 func (bot *Bot) checkFeedsLoop(ctx context.Context) {

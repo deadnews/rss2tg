@@ -212,6 +212,24 @@ func TestHandleSubNonForumSkipsTopic(t *testing.T) {
 	require.Len(t, general, 1)
 }
 
+func TestRouteMessageClearsTopicCreationPin(t *testing.T) {
+	tb := newTestCmdBot(t)
+
+	tb.bot.routeMessage(t.Context(), &telegram.Message{
+		Chat:              telegram.Chat{ID: 100, IsForum: true},
+		MessageThreadID:   7,
+		IsTopicMessage:    true,
+		ForumTopicCreated: &telegram.ForumTopicCreated{Name: "News"},
+	})
+
+	unpins := tb.getUnpins()
+	require.Len(t, unpins, 1)
+	assert.Equal(t, int64(100), unpins[0].ChatID)
+	assert.Equal(t, 7, unpins[0].ThreadID)
+	// A topic-creation service message is not treated as a command.
+	assert.Empty(t, tb.getSent())
+}
+
 func TestHandleListShowsTitle(t *testing.T) {
 	tb := newTestCmdBot(t)
 	feedURL := tb.ts.URL + "/cmd.xml"
