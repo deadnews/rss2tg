@@ -153,7 +153,7 @@ func TestFetchVideoInfo(t *testing.T) {
 			assert.Equal(t, "none", info.LiveStatus)
 			assert.Equal(t, 21*time.Minute+3*time.Second, info.Duration)
 			assert.True(t, info.ScheduledStart.IsZero())
-			assert.False(t, info.IsStream())
+			assert.False(t, info.Stream)
 		})
 	})
 
@@ -162,7 +162,7 @@ func TestFetchVideoInfo(t *testing.T) {
 			info, err := FetchVideoInfo(t.Context(), "test-key", "abc")
 			require.NoError(t, err)
 			assert.Equal(t, "live", info.LiveStatus)
-			assert.True(t, info.IsStream())
+			assert.True(t, info.Stream)
 		})
 	})
 
@@ -174,7 +174,7 @@ func TestFetchVideoInfo(t *testing.T) {
 			assert.Equal(t,
 				time.Date(2026, 5, 25, 18, 0, 0, 0, time.UTC),
 				info.ScheduledStart.UTC())
-			assert.True(t, info.IsStream())
+			assert.True(t, info.Stream)
 		})
 	})
 
@@ -183,7 +183,7 @@ func TestFetchVideoInfo(t *testing.T) {
 			info, err := FetchVideoInfo(t.Context(), "test-key", "abc")
 			require.NoError(t, err)
 			assert.Equal(t, "none", info.LiveStatus)
-			assert.True(t, info.IsStream(), "an ended broadcast is still a stream")
+			assert.True(t, info.Stream, "an ended broadcast is still a stream")
 		})
 	})
 

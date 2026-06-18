@@ -238,7 +238,7 @@ func TestSubscribeFeedSendsOnlyLatest(t *testing.T) {
 	feedURL := tb.ts.URL + "/seed.xml"
 	feed, err := tb.bot.parseFeed(t.Context(), feedURL)
 	require.NoError(t, err)
-	tb.bot.deliverInitialEntries(t.Context(), feedURL, feed, []store.ChatFeed{{ChatID: 100, Format: "link"}})
+	tb.bot.deliverInitialEntries(t.Context(), feedURL, feed, []store.ChatFeed{{ChatID: 100, Sub: store.Sub{Format: "link"}}})
 
 	assert.Len(t, tb.getSent(), initialSendLimit)
 

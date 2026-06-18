@@ -33,11 +33,6 @@ type VideoInfo struct {
 	Stream         bool      // a broadcast
 }
 
-// IsStream reports whether the video is a broadcast.
-func (v *VideoInfo) IsStream() bool {
-	return v.Stream
-}
-
 // MetaLine renders duration, scheduled time, or LIVE tag.
 func (v *VideoInfo) MetaLine() string {
 	switch v.LiveStatus {

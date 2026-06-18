@@ -54,7 +54,7 @@ func (bot *Bot) deliverNew(ctx context.Context, feedURL string, feed *gofeed.Fee
 
 		isShort := youtube.IsShort(item.Link)
 		info := bot.videoInfo(ctx, item.Link)
-		isLive := info != nil && info.IsStream()
+		isLive := info != nil && info.Stream
 		var meta string
 		if info != nil {
 			meta = info.MetaLine()

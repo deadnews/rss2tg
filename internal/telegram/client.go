@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -133,6 +134,14 @@ func (e *APIError) Error() string {
 	return e.Method + ": " + e.Desc
 }
 
+// retryAfter returns the rate-limit backoff Telegram requested, or 0.
+func (r *Response[T]) retryAfter() time.Duration {
+	if r.Parameters == nil || r.Parameters.RetryAfter <= 0 {
+		return 0
+	}
+	return time.Duration(r.Parameters.RetryAfter) * time.Second
+}
+
 // postWithRetry POSTs payload, retrying once on 429; a permanent rejection returns *APIError.
 func (c *Client) postWithRetry(ctx context.Context, method string, payload any) error {
 	body, err := json.Marshal(payload)
@@ -148,25 +157,28 @@ func (c *Client) postWithRetry(ctx context.Context, method string, payload any) 
 		return nil
 	}
 
-	if result.Parameters != nil && result.Parameters.RetryAfter > 0 {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("%s: %w", method, ctx.Err())
-		case <-time.After(time.Duration(result.Parameters.RetryAfter) * time.Second):
-		}
-
-		result, err = c.post(ctx, method, body)
-		if err != nil {
-			return err
-		}
-		if result.OK {
-			return nil
-		}
-		if result.Parameters != nil && result.Parameters.RetryAfter > 0 {
-			return fmt.Errorf("%s: %s", method, result.Desc)
-		}
+	wait := result.retryAfter()
+	if wait == 0 {
+		return &APIError{Method: method, Desc: result.Desc}
 	}
 
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("%s: %w", method, ctx.Err())
+	case <-time.After(wait):
+	}
+
+	result, err = c.post(ctx, method, body)
+	if err != nil {
+		return err
+	}
+	if result.OK {
+		return nil
+	}
+	// Still rate-limited: transient, retry next cycle rather than dropping.
+	if result.retryAfter() > 0 {
+		return fmt.Errorf("%s: %s", method, result.Desc)
+	}
 	return &APIError{Method: method, Desc: result.Desc}
 }
 
@@ -177,7 +189,7 @@ func (c *Client) post(ctx context.Context, method string, body []byte) (*Respons
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.client.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", method, err)
 	}
@@ -200,7 +212,7 @@ func (c *Client) get(ctx context.Context, method string, query url.Values, dest 
 		return fmt.Errorf("%s: %w", method, err)
 	}
 
-	resp, err := c.client.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return fmt.Errorf("%s: %w", method, err)
 	}
@@ -210,6 +222,18 @@ func (c *Client) get(ctx context.Context, method string, query url.Values, dest 
 		return fmt.Errorf("%s decode (status %d): %w", method, resp.StatusCode, err)
 	}
 	return nil
+}
+
+// do sends the request, stripping the token-bearing URL from transport errors.
+func (c *Client) do(req *http.Request) (*http.Response, error) {
+	resp, err := c.client.Do(req)
+	if err == nil {
+		return resp, nil
+	}
+	if ue, ok := errors.AsType[*url.Error](err); ok {
+		return nil, fmt.Errorf("%s: %w", ue.Op, ue.Err)
+	}
+	return nil, fmt.Errorf("request: %w", err)
 }
 
 func (c *Client) url(method string) string {

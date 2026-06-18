@@ -185,28 +185,16 @@ func (s *Store) SetFormat(chatID int64, threadID int, format string) (int, error
 	return count, nil
 }
 
-// ChatFeed pairs a chat topic with its subscription options for a given feed.
+// ChatFeed pairs a chat topic with the subscription it delivers.
 type ChatFeed struct {
 	ChatID   int64
 	ThreadID int
-	Format   string
-	Shorts   bool
-	NoLive   bool
-	Exclude  []string
-	Include  []string
+	Sub
 }
 
-// ChatFeed projects a Sub into the delivery options for the given chat topic.
+// ChatFeed pairs a Sub with the chat topic it's delivered to.
 func (sub *Sub) ChatFeed(chatID int64, threadID int) ChatFeed {
-	return ChatFeed{
-		ChatID:   chatID,
-		ThreadID: threadID,
-		Format:   sub.Format,
-		Shorts:   sub.Shorts,
-		NoLive:   sub.NoLive,
-		Exclude:  sub.Exclude,
-		Include:  sub.Include,
-	}
+	return ChatFeed{ChatID: chatID, ThreadID: threadID, Sub: *sub}
 }
 
 // AllFeeds returns a map of feed URL → list of subscribed chats with their options.

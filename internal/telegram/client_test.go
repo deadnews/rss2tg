@@ -21,6 +21,29 @@ func testClient(t *testing.T, handler http.HandlerFunc) *Client {
 	return c
 }
 
+func TestRedactsBotTokenOnTransportError(t *testing.T) {
+	// Point at a dead listener so http.Client.Do fails with the token-bearing URL.
+	ts := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	deadURL := ts.URL
+	ts.Close()
+
+	const token = "super-secret-token"
+	c := NewClient(token)
+	c.BaseURL = deadURL
+
+	t.Run("get path", func(t *testing.T) {
+		_, err := c.GetMe(t.Context())
+		require.Error(t, err)
+		assert.NotContains(t, err.Error(), token)
+	})
+
+	t.Run("post path", func(t *testing.T) {
+		err := c.SendMessage(t.Context(), 100, 0, "hi", false)
+		require.Error(t, err)
+		assert.NotContains(t, err.Error(), token)
+	})
+}
+
 func TestGetMe(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		c := testClient(t, func(w http.ResponseWriter, r *http.Request) {

@@ -79,10 +79,7 @@ func Text(item *gofeed.Item) string {
 	}
 
 	// Prefer full content over summary.
-	text := item.Content
-	if text == "" {
-		text = item.Description
-	}
+	text := cmp.Or(item.Content, item.Description)
 	b.WriteString(normalizeText(sanitizeHTML(text), 0))
 	return b.String()
 }
@@ -124,9 +121,6 @@ func redditDirectURL(u string) string {
 }
 
 func extractExcerpt(item *gofeed.Item) string {
-	text := item.Description
-	if text == "" {
-		text = item.Content
-	}
+	text := cmp.Or(item.Description, item.Content)
 	return normalizeText(sanitizeHTML(text), maxExcerptLines)
 }
