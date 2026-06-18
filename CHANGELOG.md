@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.0.1-alpha.7](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.7) - 2026-06-17
+## [0.0.1-alpha.8](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.8) - 2026-06-18
 
 ### Features
 
@@ -19,6 +19,10 @@
 - truncate messages to telegram limits - ([afc9ca4](https://github.com/deadnews/rss2tg/commit/afc9ca46068daa06ed4c3dc81ae7bbfb3f774ff0))
 - cap seen entries by feed length - ([730961b](https://github.com/deadnews/rss2tg/commit/730961b6db326265c5489a045f84cf166195498d))
 - change `link` format - ([7b87a05](https://github.com/deadnews/rss2tg/commit/7b87a05018df3d12d078a014caa5a8dd2b408a1a))
+
+### Refactor
+
+- simplify - ([392dcb1](https://github.com/deadnews/rss2tg/commit/392dcb19c47085a954e0df7c182d9066bd5a71ff))
 
 ### Dependencies
 
