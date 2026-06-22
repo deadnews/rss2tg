@@ -33,7 +33,7 @@ func LoadConfig() (*Config, error) {
 		return nil, errors.New("RSS2TG_MANAGER must be a valid integer")
 	}
 
-	interval := 5 * time.Minute
+	interval := 10 * time.Minute
 	if v := os.Getenv("RSS2TG_INTERVAL"); v != "" {
 		interval, err = time.ParseDuration(v)
 		if err != nil || interval <= 0 {

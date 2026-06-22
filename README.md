@@ -19,7 +19,7 @@ docker pull ghcr.io/deadnews/rss2tg
 | ----------------- | -------- | ----------- | ------------------- |
 | `RSS2TG_TOKEN`    | yes      | —           | Telegram bot token  |
 | `RSS2TG_MANAGER`  | yes      | —           | Authorized user ID  |
-| `RSS2TG_INTERVAL` | no       | `5m`        | Feed check interval |
+| `RSS2TG_INTERVAL` | no       | `10m`       | Feed check interval |
 | `RSS2TG_DB_PATH`  | no       | `rss2tg.db` | Database file path  |
 
 ### Getting `TOKEN` and `MANAGER`

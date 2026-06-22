@@ -134,7 +134,7 @@ func TestFetchVideoInfo(t *testing.T) {
 	withServer := func(t *testing.T, body string, fn func()) {
 		t.Helper()
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, "test-key", r.URL.Query().Get("key"))
+			assert.Equal(t, "test-key", r.Header.Get("X-Goog-Api-Key"))
 			assert.NotEmpty(t, r.URL.Query().Get("id"))
 			assert.Contains(t, r.URL.Query().Get("part"), "liveStreamingDetails")
 			_, _ = w.Write([]byte(body))

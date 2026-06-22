@@ -82,12 +82,12 @@ func FetchVideoInfo(ctx context.Context, apiKey, videoID string) (*VideoInfo, er
 	q := url.Values{
 		"part": {"snippet,contentDetails,liveStreamingDetails"},
 		"id":   {videoID},
-		"key":  {apiKey},
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL+"?"+q.Encode(), http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("building request: %w", err)
 	}
+	req.Header.Set("X-Goog-Api-Key", apiKey)
 
 	resp, err := client.Do(req)
 	if err != nil {
