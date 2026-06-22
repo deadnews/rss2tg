@@ -4,9 +4,10 @@ go 1.26
 
 require (
 	github.com/mmcdole/gofeed v1.3.0
-	github.com/stretchr/testify v1.11.1
-	go.etcd.io/bbolt v1.4.3
+	go.etcd.io/bbolt v1.5.0
 )
+
+require github.com/stretchr/testify v1.11.1
 
 require (
 	github.com/PuerkitoBio/goquery v1.12.0 // indirect
