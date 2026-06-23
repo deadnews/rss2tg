@@ -44,6 +44,9 @@ Shorts are filtered by default — append `shorts` to include them.
 Live streams are included by default — append `nolive` to filter
 them out (requires a YouTube API key).
 
+GitHub, Gitea, and Codeberg repo URLs auto-resolve to their releases
+Atom feed; pass a `/releases` or `/tags` URL to choose.
+
 Title filters match whole words case-insensitively. Exclude wins over include.
 Re-running `/sub` for an existing URL replaces its options (`/list` prints each
 sub as the exact `/sub` line to copy, edit, and resend).
@@ -51,6 +54,7 @@ sub as the exact `/sub` line to copy, edit, and resend).
 ```sh
 /sub https://example.com/feed.xml pw exclude:crypto,ai
 /sub https://reddit.com/r/programming/.rss link include:go,rust
+/sub https://github.com/deadnews/rss2tg
 ```
 
 ### Forum topics
