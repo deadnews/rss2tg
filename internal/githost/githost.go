@@ -10,8 +10,8 @@ import (
 // hosts expose Atom feeds at the same /releases.atom and /tags.atom paths.
 var hosts = map[string]bool{
 	"github.com":   true,
-	"codeberg.org": true,
 	"gitea.com":    true,
+	"codeberg.org": true,
 }
 
 // FeedURL rewrites a repo, releases, or tags URL to its Atom feed;

@@ -41,8 +41,8 @@ func TestHandleCommandUnauthorized(t *testing.T) {
 
 func TestHandleCommandChannelPost(t *testing.T) {
 	tb := newTestCmdBot(t)
+	tb.serveChatMember("administrator")
 
-	// Channel posts have no From — should be allowed (only admins can post).
 	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		Chat: telegram.Chat{ID: 100},
 		Text: "/help",
@@ -51,6 +51,30 @@ func TestHandleCommandChannelPost(t *testing.T) {
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
 	assert.Contains(t, sent[0].Text, "Available commands")
+}
+
+func TestHandleCommandChannelPostNonManager(t *testing.T) {
+	tb := newTestCmdBot(t)
+	tb.serveChatMember("member")
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		Chat: telegram.Chat{ID: 100},
+		Text: "/help",
+	})
+
+	assert.Empty(t, tb.getSent())
+}
+
+func TestHandleCommandChannelPostAdminCheckFails(t *testing.T) {
+	tb := newTestCmdBot(t)
+	tb.failChatMember()
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		Chat: telegram.Chat{ID: 100},
+		Text: "/help",
+	})
+
+	assert.Empty(t, tb.getSent())
 }
 
 func TestHandleHelp(t *testing.T) {

@@ -47,14 +47,8 @@ In a forum group, <code>/sub</code> from the General topic creates a topic per f
 
 Filters match whole words in the title (case-insensitive). Exclude wins over include.`
 
-// handleCommand dispatches a bot command from an authorized user.
+// handleCommand dispatches a bot command from an authorized sender.
 func (bot *Bot) handleCommand(ctx context.Context, msg *telegram.Message) {
-	// Private/group chats: verify sender is the manager.
-	// Channel posts (From == nil): trusted, only admins can post.
-	if msg.From != nil && msg.From.ID != bot.cfg.Manager {
-		return
-	}
-
 	parts := strings.Fields(msg.Text)
 	if len(parts) == 0 {
 		return
@@ -64,6 +58,12 @@ func (bot *Bot) handleCommand(ctx context.Context, msg *telegram.Message) {
 	// Strip @botname suffix (e.g. "/help@mybot").
 	if i := strings.IndexByte(cmd, '@'); i > 0 {
 		cmd = cmd[:i]
+	}
+	if !strings.HasPrefix(cmd, "/") {
+		return
+	}
+	if !bot.authorized(ctx, msg) {
+		return
 	}
 
 	// Scope the command to its forum topic; General topic reports no thread.
@@ -84,6 +84,20 @@ func (bot *Bot) handleCommand(ctx context.Context, msg *telegram.Message) {
 	case "/format":
 		bot.handleFormat(ctx, msg.Chat.ID, threadID, parts[1:])
 	}
+}
+
+// authorized reports whether msg may run commands: the manager in a private or
+// group chat, or a channel post from a channel the manager administers.
+func (bot *Bot) authorized(ctx context.Context, msg *telegram.Message) bool {
+	if msg.From != nil {
+		return msg.From.ID == bot.cfg.Manager
+	}
+	admin, err := bot.tg.IsChatAdmin(ctx, msg.Chat.ID, bot.cfg.Manager)
+	if err != nil {
+		slog.Warn("Failed to verify channel admin", "chat_id", msg.Chat.ID, "error", err)
+		return false
+	}
+	return admin
 }
 
 const (

@@ -64,6 +64,22 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64) ([]Update, error)
 	return resp.Result, nil
 }
 
+// IsChatAdmin reports whether userID is the owner or an administrator of chatID.
+func (c *Client) IsChatAdmin(ctx context.Context, chatID, userID int64) (bool, error) {
+	query := url.Values{
+		"chat_id": {strconv.FormatInt(chatID, 10)},
+		"user_id": {strconv.FormatInt(userID, 10)},
+	}
+	var resp Response[ChatMember]
+	if err := c.get(ctx, "getChatMember", query, &resp); err != nil {
+		return false, err
+	}
+	if !resp.OK {
+		return false, fmt.Errorf("getChatMember: %s", resp.Desc)
+	}
+	return resp.Result.Status == "creator" || resp.Result.Status == "administrator", nil
+}
+
 // SendMessage sends an HTML message to a chat, retrying once on rate limit.
 func (c *Client) SendMessage(ctx context.Context, chatID int64, threadID int, text string, disablePreview bool) error {
 	payload := sendMessageRequest{

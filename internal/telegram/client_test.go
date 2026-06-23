@@ -126,6 +126,42 @@ func TestGetUpdates(t *testing.T) {
 	})
 }
 
+func TestIsChatAdmin(t *testing.T) {
+	statuses := map[string]bool{
+		"creator":       true,
+		"administrator": true,
+		"member":        false,
+		"left":          false,
+		"kicked":        false,
+	}
+	for status, want := range statuses {
+		t.Run(status, func(t *testing.T) {
+			c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+				assert.Contains(t, r.URL.Path, "/getChatMember")
+				assert.Equal(t, "100", r.URL.Query().Get("chat_id"))
+				assert.Equal(t, "42", r.URL.Query().Get("user_id"))
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(Response[ChatMember]{OK: true, Result: ChatMember{Status: status}})
+			})
+
+			admin, err := c.IsChatAdmin(t.Context(), 100, 42)
+			require.NoError(t, err)
+			assert.Equal(t, want, admin)
+		})
+	}
+
+	t.Run("error response", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Response[ChatMember]{OK: false, Desc: "user not found"})
+		})
+
+		_, err := c.IsChatAdmin(t.Context(), 100, 42)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "user not found")
+	})
+}
+
 func TestSendMessage(t *testing.T) {
 	t.Run("success with preview", func(t *testing.T) {
 		c := testClient(t, func(w http.ResponseWriter, r *http.Request) {

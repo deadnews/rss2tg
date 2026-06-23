@@ -156,6 +156,25 @@ func (tb *testBotEnv) serveXML(path string, body []byte) {
 	})
 }
 
+// serveChatMember makes getChatMember report the given member status.
+func (tb *testBotEnv) serveChatMember(status string) {
+	tb.mux.HandleFunc("/bottest-token/getChatMember", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":     true,
+			"result": map[string]any{"status": status},
+		})
+	})
+}
+
+// failChatMember makes getChatMember return an error response.
+func (tb *testBotEnv) failChatMember() {
+	tb.mux.HandleFunc("/bottest-token/getChatMember", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "description": "chat not found"})
+	})
+}
+
 func (tb *testBotEnv) getSent() []sentMessage {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()

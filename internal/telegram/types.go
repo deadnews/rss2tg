@@ -23,6 +23,11 @@ type ForumTopicCreated struct {
 	Name string `json:"name"`
 }
 
+// ChatMember reports a user's membership status in a chat.
+type ChatMember struct {
+	Status string `json:"status"`
+}
+
 // Message represents a Telegram message.
 type Message struct {
 	From              *User              `json:"from"`
