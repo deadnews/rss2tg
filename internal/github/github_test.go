@@ -1,4 +1,4 @@
-package githost
+package github
 
 import (
 	"testing"
@@ -33,16 +33,6 @@ func TestFeedURL(t *testing.T) {
 			want: "https://github.com/deadnews/rss2tg/tags.atom",
 		},
 		{
-			name: "codeberg releases",
-			in:   "https://gitea.com/gitea/runner/releases",
-			want: "https://gitea.com/gitea/runner/releases.atom",
-		},
-		{
-			name: "gitea.com bare repo",
-			in:   "https://gitea.com/gitea/tea",
-			want: "https://gitea.com/gitea/tea/releases.atom",
-		},
-		{
 			name: "host case-insensitive",
 			in:   "https://GitHub.com/deadnews/rss2tg/releases",
 			want: "https://GitHub.com/deadnews/rss2tg/releases.atom",
@@ -53,14 +43,9 @@ func TestFeedURL(t *testing.T) {
 			want: "https://github.com/deadnews/rss2tg/releases.atom",
 		},
 		{
-			name: ".rss feed passes through",
-			in:   "https://gitea.com/gitea/runner/releases.rss",
-			want: "https://gitea.com/gitea/runner/releases.rss",
-		},
-		{
-			name: "unknown host passes through",
-			in:   "https://gitlab.com/owner/repo/releases",
-			want: "https://gitlab.com/owner/repo/releases",
+			name: "non-github host passes through",
+			in:   "https://gitea.com/gitea/runner/releases",
+			want: "https://gitea.com/gitea/runner/releases",
 		},
 		{
 			name: "commits not rewritten",

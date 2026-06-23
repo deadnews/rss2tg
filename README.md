@@ -44,8 +44,7 @@ Shorts are filtered by default — append `shorts` to include them.
 Live streams are included by default — append `nolive` to filter
 them out (requires a YouTube API key).
 
-GitHub, Gitea, and Codeberg repo URLs auto-resolve to their releases
-Atom feed; pass a `/releases` or `/tags` URL to choose.
+GitHub repo URLs auto-resolve to their releases Atom feed.
 
 Title filters match whole words case-insensitively. Exclude wins over include.
 Re-running `/sub` for an existing URL replaces its options (`/list` prints each

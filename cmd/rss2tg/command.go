@@ -11,7 +11,7 @@ import (
 	"github.com/mmcdole/gofeed"
 
 	"github.com/deadnews/rss2tg/internal/format"
-	"github.com/deadnews/rss2tg/internal/githost"
+	"github.com/deadnews/rss2tg/internal/github"
 	"github.com/deadnews/rss2tg/internal/store"
 	"github.com/deadnews/rss2tg/internal/telegram"
 	"github.com/deadnews/rss2tg/internal/youtube"
@@ -40,8 +40,6 @@ const helpText = `<b>Available commands:</b>
 <code>/help</code> — show this message
 
 YouTube channel URLs are auto-resolved to their Atom feed. YouTube Shorts are filtered by default; pass <code>shorts</code> to include them. Live streams are included by default; pass <code>nolive</code> to filter them out.
-
-GitHub/Gitea/Codeberg repo URLs are auto-resolved to their releases Atom feed; pass a <code>/releases</code> or <code>/tags</code> URL to choose.
 
 In a forum group, <code>/sub</code> from the General topic creates a topic per feed; run it inside a topic to subscribe there.
 
@@ -162,7 +160,7 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, threadID int, isFor
 		return
 	}
 
-	url, err := youtube.ResolveURL(ctx, githost.FeedURL(args[0]))
+	url, err := youtube.ResolveURL(ctx, github.FeedURL(args[0]))
 	if err != nil {
 		slog.Error("Failed to resolve feed URL", "url", args[0], "error", err)
 		bot.reply(ctx, chatID, threadID, "Failed to subscribe.")
@@ -258,7 +256,7 @@ func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, threadID int, arg
 		return
 	}
 
-	url, err := youtube.ResolveURL(ctx, githost.FeedURL(args[0]))
+	url, err := youtube.ResolveURL(ctx, github.FeedURL(args[0]))
 	if err != nil {
 		slog.Error("Failed to resolve feed URL", "url", args[0], "error", err)
 		bot.reply(ctx, chatID, threadID, "Failed to unsubscribe.")
