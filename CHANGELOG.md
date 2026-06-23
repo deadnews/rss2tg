@@ -1,9 +1,10 @@
 # Changelog
 
-## [0.0.1-alpha.10](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.10) - 2026-06-23
+## [0.0.1-alpha.11](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.11) - 2026-06-23
 
 ### Features
 
+- _(github)_ auto-resolve repo urls to releases feed - ([46b2b2b](https://github.com/deadnews/rss2tg/commit/46b2b2b493013f83e1a23a9c1a52d208ad4dd9ce))
 - _(youtube)_ enrich link entries with video duration and live status - ([d299fde](https://github.com/deadnews/rss2tg/commit/d299fde54055856dfdb69f5475655ed808e79a72))
 - add `nolive` flag to filter youtube live streams - ([49c5b99](https://github.com/deadnews/rss2tg/commit/49c5b992ef41f937d0670941662cbe318b008d9c))
 - support telegram forum topics - ([40d140e](https://github.com/deadnews/rss2tg/commit/40d140e0bf5c9f02afc3f07e145d886704d348b1))
