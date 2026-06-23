@@ -13,8 +13,8 @@ import (
 	"time"
 )
 
-// DefaultBaseURL is the production Telegram Bot API endpoint.
-const DefaultBaseURL = "https://api.telegram.org"
+// defaultBaseURL is the production Telegram Bot API endpoint.
+const defaultBaseURL = "https://api.telegram.org"
 
 const longPollTimeout = 30
 
@@ -29,7 +29,7 @@ type Client struct {
 func NewClient(token string) *Client {
 	return &Client{
 		token:   token,
-		BaseURL: DefaultBaseURL,
+		BaseURL: defaultBaseURL,
 		client: &http.Client{
 			Timeout: (longPollTimeout + 5) * time.Second,
 		},

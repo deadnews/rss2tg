@@ -150,7 +150,7 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, threadID int, isFor
 
 	url, err := youtube.ResolveURL(ctx, githost.FeedURL(args[0]))
 	if err != nil {
-		slog.Error("Failed to resolve YouTube URL", "url", args[0], "error", err)
+		slog.Error("Failed to resolve feed URL", "url", args[0], "error", err)
 		bot.reply(ctx, chatID, threadID, "Failed to subscribe.")
 		return
 	}
@@ -213,7 +213,7 @@ func (bot *Bot) forumTopicFor(ctx context.Context, chatID int64, feedURL, title 
 		bot.reply(ctx, chatID, 0, "Failed to create topic. The bot must be an admin with Manage Topics.")
 		return 0, false
 	}
-	// The auto-pinned creation message is cleared reactively in clearTopicCreationPin.
+	// Telegram auto-pins the creation message; it is cleared reactively on the service message.
 	bot.reply(ctx, chatID, 0, fmt.Sprintf("Created topic <b>%s</b>", html.EscapeString(name)))
 	return threadID, true
 }
@@ -244,11 +244,11 @@ func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, threadID int, arg
 		return
 	}
 
-	raw := githost.FeedURL(args[0])
-	url, err := youtube.ResolveURL(ctx, raw)
+	url, err := youtube.ResolveURL(ctx, githost.FeedURL(args[0]))
 	if err != nil {
-		// Fall back to the resolved URL.
-		url = raw
+		slog.Error("Failed to resolve feed URL", "url", args[0], "error", err)
+		bot.reply(ctx, chatID, threadID, "Failed to unsubscribe.")
+		return
 	}
 
 	existed, err := bot.store.RemoveSub(chatID, threadID, url)

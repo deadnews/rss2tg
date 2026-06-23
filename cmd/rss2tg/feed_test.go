@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/mmcdole/gofeed"
@@ -487,4 +488,34 @@ func TestCheckFeedsPWReddit(t *testing.T) {
 	assert.Contains(t, sent[1].Text, `<a href="https://www.reddit.com/user/Mackelowsky">`)
 	assert.Contains(t, sent[1].Text, "/u/Mackelowsky")
 	assert.Contains(t, sent[1].Text, `<a href="https://i.redd.it/6j31j4o2qrlf1.jpeg">[link]</a>`)
+}
+
+func TestCheckFeedsPWFallsBackToMessageOnPhotoFailure(t *testing.T) {
+	tb := newTestFeedBot(t)
+
+	// sendPhoto always fails → delivery must fall back to sendMessage.
+	var photoAttempts atomic.Int32
+	tb.mux.HandleFunc("/bottest-token/sendPhoto", func(w http.ResponseWriter, _ *http.Request) {
+		photoAttempts.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": false, "description": "Bad Request: wrong file identifier",
+		})
+	})
+
+	feedURL := tb.ts.URL + "/reddit.atom"
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: feedURL, Format: "pw"})
+	require.NoError(t, err)
+
+	tb.bot.checkFeeds(t.Context())
+
+	assert.Positive(t, photoAttempts.Load(), "sendPhoto should be attempted")
+	sent := tb.getSent()
+	require.Len(t, sent, 2, "both entries delivered via the sendMessage fallback")
+	assert.Contains(t, sent[0].Text, "Map of light pollution")
+
+	// Delivered → marked seen; second poll sends nothing.
+	tb.resetSent()
+	tb.bot.checkFeeds(t.Context())
+	assert.Empty(t, tb.getSent())
 }

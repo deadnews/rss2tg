@@ -78,33 +78,59 @@ func sanitizeHTML(s string) string {
 	s = blockTagReplacer.Replace(s)
 	s = reBr.ReplaceAllString(s, "\n")
 
-	s = reHTMLTag.ReplaceAllStringFunc(s, func(match string) string {
-		m := reHTMLTag.FindStringSubmatch(match)
-		closing := m[1] == "/"
-		name := strings.ToLower(m[2])
-
-		if !allowedTags[name] {
-			return ""
-		}
-		if closing {
-			return "</" + name + ">"
-		}
-		if name == "a" {
-			if href := extractHref(m[3]); href != "" {
-				return `<a href="` + href + `">`
-			}
-			return ""
-		}
-		return "<" + name + ">"
-	})
-
-	s = reEmptyAnchor.ReplaceAllString(s, "")
 	s = reSpaceEntity.ReplaceAllString(s, " ")
+	s = keepAllowedTags(s)
+	s = reEmptyAnchor.ReplaceAllString(s, "")
 	s = reAnchorPad.ReplaceAllString(s, "$1$2")
 	return s
 }
 
-// extractHref parses an href attribute and returns it re-escaped for HTML output.
+// keepAllowedTags keeps only Telegram-supported tags and escapes all other text.
+func keepAllowedTags(s string) string {
+	var b strings.Builder
+	last := 0
+	droppedAnchors := 0
+	for _, loc := range reHTMLTag.FindAllStringSubmatchIndex(s, -1) {
+		b.WriteString(escapeText(s[last:loc[0]]))
+		last = loc[1]
+		closing := s[loc[2]:loc[3]] == "/"
+		name := strings.ToLower(s[loc[4]:loc[5]])
+		switch {
+		case !allowedTags[name]:
+		case name == "a" && closing:
+			if droppedAnchors > 0 {
+				droppedAnchors--
+			} else {
+				b.WriteString("</a>")
+			}
+		case closing:
+			b.WriteString("</")
+			b.WriteString(name)
+			b.WriteByte('>')
+		case name == "a":
+			if href := extractHref(s[loc[6]:loc[7]]); href != "" {
+				b.WriteString(`<a href="`)
+				b.WriteString(href)
+				b.WriteString(`">`)
+			} else {
+				droppedAnchors++
+			}
+		default:
+			b.WriteByte('<')
+			b.WriteString(name)
+			b.WriteByte('>')
+		}
+	}
+	b.WriteString(escapeText(s[last:]))
+	return b.String()
+}
+
+// escapeText normalizes entities then escapes HTML specials in plain text.
+func escapeText(s string) string {
+	return html.EscapeString(html.UnescapeString(s))
+}
+
+// extractHref returns the href re-escaped for output, or empty if absent or an unsafe scheme.
 func extractHref(attrs string) string {
 	m := reHrefAttr.FindStringSubmatch(attrs)
 	if m == nil {
@@ -114,10 +140,17 @@ func extractHref(attrs string) string {
 	if href == "" {
 		href = m[2]
 	}
-	if href == "" {
+	href = html.UnescapeString(href)
+	if !allowedScheme(href) {
 		return ""
 	}
-	return html.EscapeString(html.UnescapeString(href))
+	return html.EscapeString(href)
+}
+
+// allowedScheme reports whether href is safe to render as a Telegram link.
+func allowedScheme(href string) bool {
+	s := strings.ToLower(strings.TrimSpace(href))
+	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
 }
 
 // numberOL replaces <li> tags inside <ol> blocks with numbered prefixes.

@@ -192,7 +192,7 @@ type ChatFeed struct {
 	Sub
 }
 
-// ChatFeed pairs a Sub with the chat topic it's delivered to.
+// ChatFeed returns the sub paired with the given chat topic.
 func (sub *Sub) ChatFeed(chatID int64, threadID int) ChatFeed {
 	return ChatFeed{ChatID: chatID, ThreadID: threadID, Sub: *sub}
 }
