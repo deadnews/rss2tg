@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.0.1-alpha.9](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.9) - 2026-06-22
+## [0.0.1-alpha.10](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.10) - 2026-06-23
 
 ### Features
 
