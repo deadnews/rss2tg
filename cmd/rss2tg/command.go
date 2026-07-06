@@ -203,7 +203,15 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, threadID int, isFor
 		verb = "Updated subscription for"
 	}
 	bot.reply(ctx, chatID, threadID, fmt.Sprintf("%s %s (%s)", verb, html.EscapeString(url), sub.Format))
-	bot.deliverInitialEntries(ctx, url, feed, []store.ChatFeed{sub.ChatFeed(chatID, threadID)})
+
+	// Deliver to every chat subscribed to the URL.
+	chats := []store.ChatFeed{sub.ChatFeed(chatID, threadID)}
+	if feeds, err := bot.store.AllFeeds(); err == nil {
+		chats = feeds[url]
+	} else {
+		slog.Error("Failed to get feeds", "error", err)
+	}
+	bot.deliverInitialEntries(ctx, url, feed, chats)
 }
 
 // forumTopicFor returns the feed's existing topic or creates one named after it.

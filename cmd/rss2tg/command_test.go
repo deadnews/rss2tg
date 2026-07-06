@@ -141,6 +141,29 @@ func TestHandleSub(t *testing.T) {
 	assert.Equal(t, "Command Test Feed", subs[0].Title)
 }
 
+func TestHandleSubDeliversInitialEntriesToExistingSubscribers(t *testing.T) {
+	tb := newTestBotEnv(t)
+	tb.serveXML("/feed.xml", []byte(testRSS))
+	feedURL := tb.ts.URL + "/feed.xml"
+
+	_, err := tb.store.AddSub(200, 0, &store.Sub{URL: feedURL, Format: "link"})
+	require.NoError(t, err)
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 100},
+		Text: "/sub " + feedURL,
+	})
+
+	var toExisting []sentMessage
+	for _, msg := range tb.getSent() {
+		if msg.ChatID == 200 {
+			toExisting = append(toExisting, msg)
+		}
+	}
+	assert.Len(t, toExisting, 2)
+}
+
 func TestHandleSubEscapesURL(t *testing.T) {
 	tb := newTestCmdBot(t)
 	feedURL := tb.ts.URL + "/cmd.xml?a=1&b=2"
