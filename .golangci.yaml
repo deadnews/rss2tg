@@ -8,6 +8,7 @@ linters:
     - bidichk
     - bodyclose
     - containedctx
+    - contextcheck
     - copyloopvar
     - dogsled
     - dupl
@@ -71,21 +72,28 @@ linters:
   settings:
     goconst:
       ignore-tests: true
+      min-occurrences: 5
     gocritic:
       enable-all: true
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
+    nolintlint:
+      require-specific: true
     gosec:
       excludes:
         - G115 # Integer overflow conversion
-        - G701 # SQL injection via taint analysis
-        - G703 # Path traversal via taint analysis
-        - G704 # SSRF via taint analysis
-        - G706 # Log injection via taint analysis
-        - G710 # Open redirect via taint analysis
   exclusions:
     rules:
       - source: "^\\s*defer\\s+"
         linters:
           - errcheck
+      - path: _test\.go
+        text: unusedwrite
+        linters:
+          - govet
       - path: _test\.go
         linters:
           - errchkjson
@@ -95,6 +103,5 @@ linters:
 
 formatters:
   enable:
-    - gofmt
     - gofumpt
     - goimports
