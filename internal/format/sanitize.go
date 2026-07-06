@@ -3,6 +3,7 @@ package format
 import (
 	"html"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -90,6 +91,15 @@ func keepAllowedTags(s string) string {
 	var b strings.Builder
 	last := 0
 	droppedAnchors := 0
+	var open []string
+	closeTags := func(downTo int) {
+		for _, name := range slices.Backward(open[downTo:]) {
+			b.WriteString("</")
+			b.WriteString(name)
+			b.WriteByte('>')
+		}
+		open = open[:downTo]
+	}
 	for _, loc := range reHTMLTag.FindAllStringSubmatchIndex(s, -1) {
 		b.WriteString(escapeText(s[last:loc[0]]))
 		last = loc[1]
@@ -97,21 +107,22 @@ func keepAllowedTags(s string) string {
 		name := strings.ToLower(s[loc[4]:loc[5]])
 		switch {
 		case !allowedTags[name]:
-		case name == "a" && closing:
-			if droppedAnchors > 0 {
-				droppedAnchors--
-			} else {
-				b.WriteString("</a>")
-			}
+		case name == "a" && closing && droppedAnchors > 0:
+			droppedAnchors--
 		case closing:
-			b.WriteString("</")
-			b.WriteString(name)
-			b.WriteByte('>')
+			i := len(open) - 1
+			for i >= 0 && open[i] != name {
+				i--
+			}
+			if i >= 0 {
+				closeTags(i)
+			}
 		case name == "a":
 			if href := extractHref(s[loc[6]:loc[7]]); href != "" {
 				b.WriteString(`<a href="`)
 				b.WriteString(href)
 				b.WriteString(`">`)
+				open = append(open, name)
 			} else {
 				droppedAnchors++
 			}
@@ -119,9 +130,11 @@ func keepAllowedTags(s string) string {
 			b.WriteByte('<')
 			b.WriteString(name)
 			b.WriteByte('>')
+			open = append(open, name)
 		}
 	}
 	b.WriteString(escapeText(s[last:]))
+	closeTags(0)
 	return b.String()
 }
 

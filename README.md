@@ -15,12 +15,16 @@ docker pull ghcr.io/deadnews/rss2tg
 
 ## Configuration
 
-| Variable          | Required | Default     | Description         |
-| ----------------- | -------- | ----------- | ------------------- |
-| `RSS2TG_TOKEN`    | yes      | —           | Telegram bot token  |
-| `RSS2TG_MANAGER`  | yes      | —           | Authorized user ID  |
-| `RSS2TG_INTERVAL` | no       | `10m`       | Feed check interval |
-| `RSS2TG_DB_PATH`  | no       | `rss2tg.db` | Database file path  |
+| Variable             | Required | Default     | Description          |
+| -------------------- | -------- | ----------- | -------------------- |
+| `RSS2TG_TOKEN`       | yes      | —           | Telegram bot token   |
+| `RSS2TG_MANAGER`     | yes      | —           | Authorized user ID   |
+| `RSS2TG_INTERVAL`    | no       | `10m`       | Feed check interval  |
+| `RSS2TG_DB_PATH`     | no       | `rss2tg.db` | Database file path   |
+| `RSS2TG_YOUTUBE_KEY` | no       | —           | YouTube Data API key |
+
+Without `RSS2TG_YOUTUBE_KEY`, YouTube entries send without duration/live
+metadata and the `nolive` filter has no effect.
 
 ### Getting `TOKEN` and `MANAGER`
 
@@ -42,7 +46,7 @@ New subscribers receive the 3 latest entries; the rest are marked seen.
 YouTube channel URLs auto-resolve to their Atom feed on `/sub`.
 Shorts are filtered by default — append `shorts` to include them.
 Live streams are included by default — append `nolive` to filter
-them out (requires a YouTube API key).
+them out (requires `RSS2TG_YOUTUBE_KEY`).
 
 GitHub repo URLs auto-resolve to their releases Atom feed.
 
@@ -67,21 +71,24 @@ General lists them all.
 
 `link` (default) — bold title + URL:
 
-```html
-<b>Post Title</b> URL
+```text
+<b>Post Title</b>
+URL
 ```
 
 `pw` — photo + title + excerpt + attribution (falls back to text if no image):
 
-```html
+```text
 <a href="URL"><b>Post Title</b></a>
 
-Excerpt text... via <a href="FEED_URL">Feed Name</a>
+Excerpt text...
+
+via <a href="FEED_URL">Feed Name</a>
 ```
 
 `text` — title + feed content with links preserved:
 
-```html
+```text
 <a href="URL"><b>Post Title</b></a>
 
 Full sanitized content with links preserved.

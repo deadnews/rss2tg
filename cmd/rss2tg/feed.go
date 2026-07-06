@@ -24,6 +24,9 @@ func (bot *Bot) checkFeeds(ctx context.Context) {
 	}
 
 	for url, chats := range feeds {
+		if ctx.Err() != nil {
+			return
+		}
 		feed, err := bot.parseFeed(ctx, url)
 		if err != nil {
 			slog.Error("Failed to parse feed", "url", url, "error", err)
@@ -52,24 +55,20 @@ func (bot *Bot) deliverNew(ctx context.Context, feedURL string, feed *gofeed.Fee
 			continue
 		}
 
-		isShort := youtube.IsShort(item.Link)
-		info := bot.videoInfo(ctx, item.Link)
-		isLive := info != nil && info.Stream
+		recipients := recipientsFor(item, chats)
+
 		var meta string
-		if info != nil {
-			meta = info.MetaLine()
+		var isLive bool
+		if len(recipients) > 0 {
+			if info := bot.videoInfo(ctx, item.Link); info != nil {
+				meta = info.MetaLine()
+				isLive = info.Stream
+			}
 		}
 
 		var delivered, retryable bool
-		for i := range chats {
-			chat := &chats[i]
-			if isShort && !chat.Shorts {
-				continue
-			}
+		for _, chat := range recipients {
 			if isLive && chat.NoLive {
-				continue
-			}
-			if !allow(item.Title, chat.Include, chat.Exclude) {
 				continue
 			}
 			err := bot.sendEntry(ctx, item, feed.Title, feed.Link, meta, chat)
@@ -95,6 +94,23 @@ func (bot *Bot) deliverNew(ctx context.Context, feedURL string, feed *gofeed.Fee
 			slog.Error("Failed to mark seen", "url", feedURL, "guid", guid, "error", err)
 		}
 	}
+}
+
+// recipientsFor returns the chats whose shorts and title filters accept the item.
+func recipientsFor(item *gofeed.Item, chats []store.ChatFeed) []*store.ChatFeed {
+	isShort := youtube.IsShort(item.Link)
+	recipients := make([]*store.ChatFeed, 0, len(chats))
+	for i := range chats {
+		chat := &chats[i]
+		if isShort && !chat.Shorts {
+			continue
+		}
+		if !allow(item.Title, chat.Include, chat.Exclude) {
+			continue
+		}
+		recipients = append(recipients, chat)
+	}
+	return recipients
 }
 
 func (bot *Bot) sendEntry(ctx context.Context, item *gofeed.Item, feedTitle, feedLink, meta string, chat *store.ChatFeed) error {

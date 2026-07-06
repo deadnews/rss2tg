@@ -76,7 +76,7 @@ func (bot *Bot) handleCommand(ctx context.Context, msg *telegram.Message) {
 	case "/sub":
 		bot.handleSub(ctx, msg.Chat.ID, threadID, msg.Chat.IsForum, parts[1:])
 	case "/unsub":
-		bot.handleUnsub(ctx, msg.Chat.ID, threadID, parts[1:])
+		bot.handleUnsub(ctx, msg.Chat.ID, threadID, msg.Chat.IsForum, parts[1:])
 	case "/list":
 		bot.handleList(ctx, msg.Chat.ID, threadID, msg.Chat.IsForum)
 	case "/format":
@@ -202,7 +202,7 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, threadID int, isFor
 	if existed {
 		verb = "Updated subscription for"
 	}
-	bot.reply(ctx, chatID, threadID, fmt.Sprintf("%s %s (%s)", verb, url, sub.Format))
+	bot.reply(ctx, chatID, threadID, fmt.Sprintf("%s %s (%s)", verb, html.EscapeString(url), sub.Format))
 	bot.deliverInitialEntries(ctx, url, feed, []store.ChatFeed{sub.ChatFeed(chatID, threadID)})
 }
 
@@ -250,7 +250,7 @@ func (bot *Bot) deliverInitialEntries(ctx context.Context, feedURL string, feed 
 	bot.deliverNew(ctx, feedURL, feed, chats)
 }
 
-func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, threadID int, args []string) {
+func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, threadID int, isForum bool, args []string) {
 	if len(args) == 0 {
 		bot.reply(ctx, chatID, threadID, unsubUsage)
 		return
@@ -263,6 +263,19 @@ func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, threadID int, arg
 		return
 	}
 
+	// From a forum's General topic, remove the feed from its topic.
+	if isForum && threadID == 0 {
+		id, found, err := bot.store.FindFeedThread(chatID, url)
+		if err != nil {
+			slog.Error("Failed to find feed thread", "chat_id", chatID, "error", err)
+			bot.reply(ctx, chatID, threadID, "Failed to unsubscribe.")
+			return
+		}
+		if found {
+			threadID = id
+		}
+	}
+
 	existed, err := bot.store.RemoveSub(chatID, threadID, url)
 	if err != nil {
 		slog.Error("Failed to remove subscription", "error", err)
@@ -271,11 +284,11 @@ func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, threadID int, arg
 	}
 
 	if !existed {
-		bot.reply(ctx, chatID, threadID, "Not subscribed to "+url)
+		bot.reply(ctx, chatID, threadID, "Not subscribed to "+html.EscapeString(url))
 		return
 	}
 
-	bot.reply(ctx, chatID, threadID, "Unsubscribed from "+url)
+	bot.reply(ctx, chatID, threadID, "Unsubscribed from "+html.EscapeString(url))
 }
 
 func (bot *Bot) handleList(ctx context.Context, chatID int64, threadID int, isForum bool) {

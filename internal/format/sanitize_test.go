@@ -45,6 +45,13 @@ func TestSanitizeHTML(t *testing.T) {
 		{"br to newline", "A<br>B<br/>C", "A\nB\nC"},
 		{"td to newline", "<table><tr><td>A</td><td>B</td></tr></table>", "A\nB\n\n"},
 		{"strips empty anchors", `<a href="x"><img src="y"/></a>text`, "text"},
+		{"closes unclosed tag", "<b>bold", "<b>bold</b>"},
+		{"closes unclosed anchor", `<a href="https://x">text`, `<a href="https://x">text</a>`},
+		{"closes nested unclosed tags", "<b>one <i>two", "<b>one <i>two</i></b>"},
+		{"closes interleaved tags at nearest valid point", "<b>one<i>two</b>three</i>", "<b>one<i>two</i></b>three"},
+		{"closes innermost of nested same-name tags", "<b>x<b>y</b>z</b>", "<b>x<b>y</b>z</b>"},
+		{"drops stray closing tag", "text</b>more", "textmore"},
+		{"drops stray anchor closer", "text</a>more", "textmore"},
 	}
 
 	for _, tt := range tests {

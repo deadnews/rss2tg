@@ -141,6 +141,21 @@ func TestHandleSub(t *testing.T) {
 	assert.Equal(t, "Command Test Feed", subs[0].Title)
 }
 
+func TestHandleSubEscapesURL(t *testing.T) {
+	tb := newTestCmdBot(t)
+	feedURL := tb.ts.URL + "/cmd.xml?a=1&b=2"
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 100},
+		Text: "/sub " + feedURL,
+	})
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Subscribed to "+tb.ts.URL+"/cmd.xml?a=1&amp;b=2")
+}
+
 func TestHandleSubInTopicRoutesToThread(t *testing.T) {
 	tb := newTestCmdBot(t)
 	feedURL := tb.ts.URL + "/cmd.xml"
@@ -361,6 +376,42 @@ func TestHandleUnsub(t *testing.T) {
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
 	assert.Contains(t, sent[0].Text, "Unsubscribed")
+}
+
+func TestHandleUnsubFromForumGeneralRemovesTopicSub(t *testing.T) {
+	tb := newTestCmdBot(t)
+
+	_, err := tb.store.AddSub(100, 5, &store.Sub{URL: "https://example.com/feed.xml", Format: "link"})
+	require.NoError(t, err)
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 100, IsForum: true},
+		Text: "/unsub https://example.com/feed.xml",
+	})
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Unsubscribed")
+	assert.Equal(t, 5, sent[0].ThreadID, "reply should go to the feed's topic")
+
+	subs, err := tb.store.ListSubs(100, 5)
+	require.NoError(t, err)
+	assert.Empty(t, subs)
+}
+
+func TestHandleUnsubEscapesURL(t *testing.T) {
+	tb := newTestCmdBot(t)
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 100},
+		Text: "/unsub https://example.com/feed?a=1&b=2",
+	})
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "Not subscribed to https://example.com/feed?a=1&amp;b=2")
 }
 
 func TestHandleUnsubNotFound(t *testing.T) {
