@@ -1,11 +1,12 @@
 # Changelog
 
-## [0.0.1-alpha.12](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.12) - 2026-07-07
+## [0.0.1-alpha.13](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.13) - 2026-07-07
 
 ### Features
 
 - _(github)_ auto-resolve repo urls to releases feed - ([46b2b2b](https://github.com/deadnews/rss2tg/commit/46b2b2b493013f83e1a23a9c1a52d208ad4dd9ce))
 - _(youtube)_ enrich link entries with video duration and live status - ([d299fde](https://github.com/deadnews/rss2tg/commit/d299fde54055856dfdb69f5475655ed808e79a72))
+- list every chat's subscriptions from a direct message - ([58cb3c2](https://github.com/deadnews/rss2tg/commit/58cb3c2103f9d2ab6b44a2b6985bec30be69c86e))
 - add `nolive` flag to filter youtube live streams - ([49c5b99](https://github.com/deadnews/rss2tg/commit/49c5b992ef41f937d0670941662cbe318b008d9c))
 - support telegram forum topics - ([40d140e](https://github.com/deadnews/rss2tg/commit/40d140e0bf5c9f02afc3f07e145d886704d348b1))
 - add filter - ([d94e660](https://github.com/deadnews/rss2tg/commit/d94e660572f9361f866ef8029fef0cf6ec238ba1))
@@ -27,6 +28,10 @@
 ### Refactor
 
 - simplify - ([392dcb1](https://github.com/deadnews/rss2tg/commit/392dcb19c47085a954e0df7c182d9066bd5a71ff))
+
+### Documentation
+
+- _(readme)_ update - ([225f242](https://github.com/deadnews/rss2tg/commit/225f24241d09cd1ddc4144d06d867ea1f3b69132))
 
 ### Dependencies
 
