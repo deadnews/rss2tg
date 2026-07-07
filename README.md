@@ -7,11 +7,15 @@
 [![CI: Main](https://img.shields.io/github/actions/workflow/status/deadnews/rss2tg/main.yml?branch=main&logo=github&logoColor=white&label=main)](https://github.com/deadnews/rss2tg)
 [![CI: Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/deadnews/rss2tg/refs/heads/badges/coverage.json)](https://github.com/deadnews/rss2tg)
 
+**[Installation](#installation)** • **[Configuration](#configuration)** • **[Commands](#commands)** • **[Feeds](#feeds)** • **[Message Formats](#message-formats)** • **[Supergroup topics](#supergroup-topics)**
+
 ## Installation
 
 ```sh
 docker pull ghcr.io/deadnews/rss2tg
 ```
+
+See [`compose.dev.yml`](compose.dev.yml) for a Compose reference.
 
 ## Configuration
 
@@ -23,9 +27,6 @@ docker pull ghcr.io/deadnews/rss2tg
 | `RSS2TG_DB_PATH`     | no       | `rss2tg.db` | Database file path   |
 | `RSS2TG_YOUTUBE_KEY` | no       | —           | YouTube Data API key |
 
-Without `RSS2TG_YOUTUBE_KEY`, YouTube entries send without duration/live
-metadata and the `nolive` filter has no effect.
-
 ### Getting `TOKEN` and `MANAGER`
 
 1. `TOKEN` — message [@BotFather](https://t.me/BotFather) → `/newbot` → copy the token.
@@ -33,39 +34,33 @@ metadata and the `nolive` filter has no effect.
 
 ## Commands
 
-| Command                                                                         | Description                         |
-| ------------------------------------------------------------------------------- | ----------------------------------- |
-| `/sub <url> [link\|pw\|text] [shorts] [nolive] [exclude:w1,w2] [include:w1,w2]` | Subscribe current chat to feed      |
-| `/unsub <url>`                                                                  | Unsubscribe from feed               |
-| `/list`                                                                         | List subscriptions (copy-pasteable) |
-| `/format <link\|pw\|text>`                                                      | Change format for all chat subs     |
-| `/help`                                                                         | Show available commands             |
+| Command                                                                         | Description                     |
+| ------------------------------------------------------------------------------- | ------------------------------- |
+| `/sub <url> [link\|pw\|text] [shorts] [nolive] [exclude:w1,w2] [include:w1,w2]` | Subscribe current chat to feed  |
+| `/unsub <url>`                                                                  | Unsubscribe from feed           |
+| `/list`                                                                         | List subscriptions              |
+| `/format <link\|pw\|text>`                                                      | Change format for all chat subs |
+| `/help`                                                                         | Show available commands         |
 
-New subscribers receive the 3 latest entries; the rest are marked seen.
-
-YouTube channel URLs auto-resolve to their Atom feed on `/sub`.
-Shorts are filtered by default — append `shorts` to include them.
-Live streams are included by default — append `nolive` to filter
-them out (requires `RSS2TG_YOUTUBE_KEY`).
-
-GitHub repo URLs auto-resolve to their releases Atom feed.
-
-Title filters match whole words case-insensitively. Exclude wins over include.
-Re-running `/sub` for an existing URL replaces its options (`/list` prints each
-sub as the exact `/sub` line to copy, edit, and resend).
-
-```sh
+```text
 /sub https://example.com/feed.xml pw exclude:crypto,ai
 /sub https://reddit.com/r/programming/.rss link include:go,rust
 /sub https://github.com/deadnews/rss2tg
 ```
 
-### Forum topics
+- New subscribers receive the 3 latest entries; the rest are marked seen.
+- `/list` prints each sub as the exact `/sub` line to copy, edit, and resend.
+- Re-running `/sub` for an already-subscribed URL replaces its options.
+- Title filters match whole words case-insensitively; exclude wins over include.
 
-In a forum supergroup, `/sub` from the **General** topic auto-creates a topic per
-feed (the bot must be an admin with `can_manage_topics`); run it inside a topic to
-subscribe there instead. Each topic keeps its own subscriptions; `/list` from
-General lists them all.
+## Feeds
+
+- YouTube channel URLs auto-resolve to their Atom feed.
+  - Shorts are filtered by default — append `shorts` to include them.
+  - Live streams are included by default — append `nolive` to filter them out.
+  - Without `RSS2TG_YOUTUBE_KEY`, messages are sent without
+    duration and live metadata; `nolive` has no effect.
+- GitHub repo URLs auto-resolve to their releases Atom feed.
 
 ## Message Formats
 
@@ -74,6 +69,14 @@ General lists them all.
 ```text
 <b>Post Title</b>
 URL
+```
+
+`text` — title + feed content with links preserved:
+
+```text
+<a href="URL"><b>Post Title</b></a>
+
+Full sanitized content with links preserved.
 ```
 
 `pw` — photo + title + excerpt + attribution (falls back to text if no image):
@@ -86,10 +89,10 @@ Excerpt text...
 via <a href="FEED_URL">Feed Name</a>
 ```
 
-`text` — title + feed content with links preserved:
+## Supergroup topics
 
-```text
-<a href="URL"><b>Post Title</b></a>
-
-Full sanitized content with links preserved.
-```
+- `/sub` from the **General** topic auto-creates a topic per feed.
+  - The bot must be an admin with `can_manage_topics`.
+- `/sub` inside a topic subscribes there.
+- `/list` from **General** lists every topic's subscriptions.
+- `/list` inside a topic lists just that topic's.
