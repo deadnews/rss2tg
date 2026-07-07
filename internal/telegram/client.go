@@ -80,6 +80,19 @@ func (c *Client) IsChatAdmin(ctx context.Context, chatID, userID int64) (bool, e
 	return resp.Result.Status == "creator" || resp.Result.Status == "administrator", nil
 }
 
+// GetChat returns metadata for a chat, such as its title.
+func (c *Client) GetChat(ctx context.Context, chatID int64) (*Chat, error) {
+	query := url.Values{"chat_id": {strconv.FormatInt(chatID, 10)}}
+	var resp Response[Chat]
+	if err := c.get(ctx, "getChat", query, &resp); err != nil {
+		return nil, err
+	}
+	if !resp.OK {
+		return nil, fmt.Errorf("getChat: %s", resp.Desc)
+	}
+	return &resp.Result, nil
+}
+
 // SendMessage sends an HTML message to a chat, retrying once on rate limit.
 func (c *Client) SendMessage(ctx context.Context, chatID int64, threadID int, text string, disablePreview bool) error {
 	payload := sendMessageRequest{

@@ -140,6 +140,29 @@ func TestAllFeeds(t *testing.T) {
 	assert.Len(t, feeds["https://b.com/feed"], 1)
 }
 
+func TestAllSubs(t *testing.T) {
+	s := testStore(t)
+
+	_, err := s.AddSub(100, 0, &Sub{URL: "https://a.com/feed", Format: "link"})
+	require.NoError(t, err)
+	_, err = s.AddSub(100, 5, &Sub{URL: "https://b.com/feed", Format: "pw"})
+	require.NoError(t, err)
+	_, err = s.AddSub(200, 0, &Sub{URL: "https://c.com/feed", Format: "text"})
+	require.NoError(t, err)
+
+	subs, err := s.AllSubs()
+	require.NoError(t, err)
+	require.Len(t, subs, 3)
+
+	got := make(map[string]ChatFeed)
+	for _, cf := range subs {
+		got[cf.URL] = cf
+	}
+	assert.Equal(t, int64(100), got["https://b.com/feed"].ChatID)
+	assert.Equal(t, 5, got["https://b.com/feed"].ThreadID)
+	assert.Equal(t, int64(200), got["https://c.com/feed"].ChatID)
+}
+
 func TestSubsIsolatedPerThread(t *testing.T) {
 	s := testStore(t)
 	const url = "https://a.com/feed"

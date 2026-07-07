@@ -416,7 +416,7 @@ func TestHandleUnsubFromForumGeneralRemovesTopicSub(t *testing.T) {
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
 	assert.Contains(t, sent[0].Text, "Unsubscribed")
-	assert.Equal(t, 5, sent[0].ThreadID, "reply should go to the feed's topic")
+	assert.Equal(t, 0, sent[0].ThreadID, "reply should go to General where the command was issued")
 
 	subs, err := tb.store.ListSubs(100, 5)
 	require.NoError(t, err)
@@ -525,6 +525,86 @@ func TestHandleListFromForumTopicStaysScoped(t *testing.T) {
 	require.Len(t, sent, 1)
 	assert.Contains(t, sent[0].Text, "https://a.com/feed")
 	assert.NotContains(t, sent[0].Text, "https://b.com/feed")
+}
+
+func TestHandleListInPrivateListsEveryChat(t *testing.T) {
+	tb := newTestCmdBot(t)
+	tb.serveChat(map[int64]string{-100: "News Group", -200: "Dev Group"})
+
+	_, err := tb.store.AddSub(-100, 0, &store.Sub{URL: "https://a.com/feed", Format: "link"})
+	require.NoError(t, err)
+	_, err = tb.store.AddSub(-100, 5, &store.Sub{URL: "https://b.com/feed", Format: "pw"})
+	require.NoError(t, err)
+	_, err = tb.store.AddSub(-200, 0, &store.Sub{URL: "https://c.com/feed", Format: "text"})
+	require.NoError(t, err)
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 42, Type: "private"},
+		Text: "/list",
+	})
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Equal(t, 0, sent[0].ThreadID)
+	msg := sent[0].Text
+	assert.Contains(t, msg, "<b>News Group</b>")
+	assert.Contains(t, msg, "(topic 5)")
+	assert.Contains(t, msg, "<b>Dev Group</b>")
+	assert.Contains(t, msg, "https://a.com/feed")
+	assert.Contains(t, msg, "https://b.com/feed")
+	assert.Contains(t, msg, "https://c.com/feed")
+}
+
+func TestHandleListInPrivateShowsFeedTitles(t *testing.T) {
+	tb := newTestCmdBot(t)
+	tb.serveChat(map[int64]string{-100: "News Group"})
+
+	_, err := tb.store.AddSub(-100, 0, &store.Sub{URL: "https://a.com/feed", Title: "Feed A", Format: "link"})
+	require.NoError(t, err)
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 42, Type: "private"},
+		Text: "/list",
+	})
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "<b>News Group</b>")
+	assert.Contains(t, sent[0].Text, "<b>Feed A</b>")
+	assert.Contains(t, sent[0].Text, "<code>/sub https://a.com/feed link</code>")
+}
+
+func TestHandleListInPrivateFallsBackToChatID(t *testing.T) {
+	tb := newTestCmdBot(t)
+	// Without a getChat handler, the lookup fails and the ID is used.
+	_, err := tb.store.AddSub(-100, 0, &store.Sub{URL: "https://a.com/feed", Format: "link"})
+	require.NoError(t, err)
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 42, Type: "private"},
+		Text: "/list",
+	})
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "<b>-100</b>")
+}
+
+func TestHandleListInPrivateEmpty(t *testing.T) {
+	tb := newTestCmdBot(t)
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 42, Type: "private"},
+		Text: "/list",
+	})
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "No subscriptions")
 }
 
 func TestHandleListEmpty(t *testing.T) {

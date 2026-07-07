@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -164,6 +165,19 @@ func (tb *testBotEnv) serveChatMember(status string) {
 			"ok":     true,
 			"result": map[string]any{"status": status},
 		})
+	})
+}
+
+// serveChat makes getChat report the given title for each chat ID.
+func (tb *testBotEnv) serveChat(titles map[int64]string) {
+	tb.mux.HandleFunc("/bottest-token/getChat", func(w http.ResponseWriter, r *http.Request) {
+		id, _ := strconv.ParseInt(r.URL.Query().Get("chat_id"), 10, 64)
+		result := map[string]any{"id": id, "type": "supergroup"}
+		if title, ok := titles[id]; ok {
+			result["title"] = title
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "result": result})
 	})
 }
 

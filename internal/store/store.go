@@ -197,15 +197,15 @@ func (sub *Sub) ChatFeed(chatID int64, threadID int) ChatFeed {
 	return ChatFeed{ChatID: chatID, ThreadID: threadID, Sub: *sub}
 }
 
-// AllFeeds returns a map of feed URL → list of subscribed chats with their options.
-func (s *Store) AllFeeds() (map[string][]ChatFeed, error) {
-	feeds := make(map[string][]ChatFeed)
+// AllSubs returns every subscription across all chats and topics.
+func (s *Store) AllSubs() ([]ChatFeed, error) {
+	var subs []ChatFeed
 
 	err := s.db.View(func(tx *bolt.Tx) error {
-		subs := tx.Bucket(bucketSubs)
-		return subs.ForEach(func(k, _ []byte) error {
+		buckets := tx.Bucket(bucketSubs)
+		return buckets.ForEach(func(k, _ []byte) error {
 			chatID, threadID := parseChatKey(k)
-			chat := subs.Bucket(k)
+			chat := buckets.Bucket(k)
 			if chat == nil {
 				return nil
 			}
@@ -214,15 +214,28 @@ func (s *Store) AllFeeds() (map[string][]ChatFeed, error) {
 				if err != nil {
 					return err
 				}
-				feeds[sub.URL] = append(feeds[sub.URL], sub.ChatFeed(chatID, threadID))
+				subs = append(subs, sub.ChatFeed(chatID, threadID))
 				return nil
 			})
 		})
 	})
 	if err != nil {
-		return nil, fmt.Errorf("listing all feeds: %w", err)
+		return nil, fmt.Errorf("listing all subscriptions: %w", err)
 	}
 
+	return subs, nil
+}
+
+// AllFeeds returns a map of feed URL → list of subscribed chats with their options.
+func (s *Store) AllFeeds() (map[string][]ChatFeed, error) {
+	subs, err := s.AllSubs()
+	if err != nil {
+		return nil, err
+	}
+	feeds := make(map[string][]ChatFeed)
+	for _, cf := range subs {
+		feeds[cf.URL] = append(feeds[cf.URL], cf)
+	}
 	return feeds, nil
 }
 

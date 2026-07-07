@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"html"
 	"log/slog"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/mmcdole/gofeed"
@@ -39,11 +41,17 @@ const helpText = `<b>Available commands:</b>
 <code>/format &lt;link|pw|text&gt;</code> — change format for all subs
 <code>/help</code> — show this message
 
-YouTube channel URLs are auto-resolved to their Atom feed. YouTube Shorts are filtered by default; pass <code>shorts</code> to include them. Live streams are included by default; pass <code>nolive</code> to filter them out.
+<b>Feeds</b>
+• YouTube channel URLs auto-resolve to their Atom feed.
+• Shorts are filtered by default — add <code>shorts</code> to include them.
+• Live streams are included by default — add <code>nolive</code> to filter them out.
 
-In a forum group, <code>/sub</code> from the General topic creates a topic per feed; run it inside a topic to subscribe there.
+<b>Filters</b>
+• Match whole words in the title, case-insensitively; exclude wins over include.
 
-Filters match whole words in the title (case-insensitive). Exclude wins over include.`
+<b>Topics</b>
+• <code>/sub</code> from General creates a topic per feed; inside a topic subscribes there.
+• <code>/list</code> from General shows every topic.`
 
 // handleCommand dispatches a bot command from an authorized sender.
 func (bot *Bot) handleCommand(ctx context.Context, msg *telegram.Message) {
@@ -78,7 +86,7 @@ func (bot *Bot) handleCommand(ctx context.Context, msg *telegram.Message) {
 	case "/unsub":
 		bot.handleUnsub(ctx, msg.Chat.ID, threadID, msg.Chat.IsForum, parts[1:])
 	case "/list":
-		bot.handleList(ctx, msg.Chat.ID, threadID, msg.Chat.IsForum)
+		bot.handleList(ctx, msg.Chat.ID, threadID, msg.Chat.IsForum, msg.Chat.Type == "private")
 	case "/format":
 		bot.handleFormat(ctx, msg.Chat.ID, threadID, parts[1:])
 	}
@@ -271,7 +279,8 @@ func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, threadID int, isF
 		return
 	}
 
-	// From a forum's General topic, remove the feed from its topic.
+	// From General, remove from the feed's own topic but reply in General.
+	target := threadID
 	if isForum && threadID == 0 {
 		id, found, err := bot.store.FindFeedThread(chatID, url)
 		if err != nil {
@@ -280,11 +289,11 @@ func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, threadID int, isF
 			return
 		}
 		if found {
-			threadID = id
+			target = id
 		}
 	}
 
-	existed, err := bot.store.RemoveSub(chatID, threadID, url)
+	existed, err := bot.store.RemoveSub(chatID, target, url)
 	if err != nil {
 		slog.Error("Failed to remove subscription", "error", err)
 		bot.reply(ctx, chatID, threadID, "Failed to unsubscribe.")
@@ -299,7 +308,13 @@ func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, threadID int, isF
 	bot.reply(ctx, chatID, threadID, "Unsubscribed from "+html.EscapeString(url))
 }
 
-func (bot *Bot) handleList(ctx context.Context, chatID int64, threadID int, isForum bool) {
+func (bot *Bot) handleList(ctx context.Context, chatID int64, threadID int, isForum, isPrivate bool) {
+	// A private chat lists subs across every chat, not just its own.
+	if isPrivate {
+		bot.listAllSubs(ctx, chatID)
+		return
+	}
+
 	var subs []store.Sub
 	var err error
 	// From a forum's General topic, list every topic's subs.
@@ -324,18 +339,79 @@ func (bot *Bot) handleList(ctx context.Context, chatID int64, threadID int, isFo
 		if i > 0 {
 			b.WriteString("\n")
 		}
-		sub := &subs[i]
-		if sub.Title != "" {
-			b.WriteString("<b>")
-			b.WriteString(html.EscapeString(sub.Title))
-			b.WriteString("</b>\n")
-		}
-		b.WriteString("<code>")
-		b.WriteString(html.EscapeString(formatSubCommand(sub)))
-		b.WriteString("</code>\n")
+		writeSub(&b, &subs[i])
 	}
 
 	bot.reply(ctx, chatID, threadID, b.String())
+}
+
+// listAllSubs replies with every subscription across all chats,
+// grouped by chat and topic.
+func (bot *Bot) listAllSubs(ctx context.Context, chatID int64) {
+	subs, err := bot.store.AllSubs()
+	if err != nil {
+		slog.Error("Failed to list subscriptions", "error", err)
+		bot.reply(ctx, chatID, 0, "Failed to list subscriptions.")
+		return
+	}
+	if len(subs) == 0 {
+		bot.reply(ctx, chatID, 0, "No subscriptions.")
+		return
+	}
+
+	slices.SortFunc(subs, func(a, b store.ChatFeed) int {
+		return cmp.Or(cmp.Compare(a.ChatID, b.ChatID), cmp.Compare(a.ThreadID, b.ThreadID))
+	})
+
+	labels := make(map[int64]string)
+	var b strings.Builder
+	for i := range subs {
+		cf := &subs[i]
+		if i == 0 || cf.ChatID != subs[i-1].ChatID || cf.ThreadID != subs[i-1].ThreadID {
+			if i > 0 {
+				b.WriteString("\n")
+			}
+			b.WriteString("<b>")
+			b.WriteString(html.EscapeString(bot.chatLabel(ctx, labels, cf.ChatID)))
+			b.WriteString("</b>")
+			if cf.ThreadID != 0 {
+				b.WriteString(" (topic ")
+				b.WriteString(strconv.Itoa(cf.ThreadID))
+				b.WriteString(")")
+			}
+			b.WriteString("\n")
+		}
+		writeSub(&b, &cf.Sub)
+	}
+
+	bot.reply(ctx, chatID, 0, b.String())
+}
+
+// chatLabel resolves a chat's title, or its numeric ID when unavailable.
+func (bot *Bot) chatLabel(ctx context.Context, cache map[int64]string, chatID int64) string {
+	if label, ok := cache[chatID]; ok {
+		return label
+	}
+	label := strconv.FormatInt(chatID, 10)
+	if chat, err := bot.tg.GetChat(ctx, chatID); err != nil {
+		slog.Warn("Failed to resolve chat title", "chat_id", chatID, "error", err)
+	} else if chat.Title != "" {
+		label = chat.Title
+	}
+	cache[chatID] = label
+	return label
+}
+
+// writeSub renders a sub as an optional bold title above its /sub line.
+func writeSub(b *strings.Builder, sub *store.Sub) {
+	if sub.Title != "" {
+		b.WriteString("<b>")
+		b.WriteString(html.EscapeString(sub.Title))
+		b.WriteString("</b>\n")
+	}
+	b.WriteString("<code>")
+	b.WriteString(html.EscapeString(formatSubCommand(sub)))
+	b.WriteString("</code>\n")
 }
 
 // formatSubCommand renders a sub as the /sub line that recreates it.

@@ -50,6 +50,7 @@ See [`compose.dev.yml`](compose.dev.yml) for a Compose reference.
 
 - New subscribers receive the 3 latest entries; the rest are marked seen.
 - `/list` prints each sub as the exact `/sub` line to copy, edit, and resend.
+- In a direct message, `/list` spans every chat, grouped by chat title.
 - Re-running `/sub` for an already-subscribed URL replaces its options.
 - Title filters match whole words case-insensitively; exclude wins over include.
 

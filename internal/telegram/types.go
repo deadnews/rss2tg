@@ -8,8 +8,10 @@ type User struct {
 
 // Chat represents a Telegram chat.
 type Chat struct {
-	ID      int64 `json:"id"`
-	IsForum bool  `json:"is_forum"`
+	ID      int64  `json:"id"`
+	Type    string `json:"type"`
+	Title   string `json:"title"`
+	IsForum bool   `json:"is_forum"`
 }
 
 // ForumTopic represents a created forum topic.
