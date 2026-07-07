@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.0.1-alpha.11](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.11) - 2026-06-23
+## [0.0.1-alpha.12](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.12) - 2026-07-07
 
 ### Features
 
@@ -13,6 +13,8 @@
 
 ### Bug fixes
 
+- deliver initial entries feed-wide - ([0e6f91c](https://github.com/deadnews/rss2tg/commit/0e6f91c14acb3134ca4d15b90f110d392b53e5f0))
+- route general-topic `/unsub` - ([e5c7b4a](https://github.com/deadnews/rss2tg/commit/e5c7b4a1c7e1bcdd77df1fe2f16ec873ae4230ad))
 - default `RSS2TG_INTERVAL` to 10m - ([7b1089c](https://github.com/deadnews/rss2tg/commit/7b1089cf882ad699af37962c5bf00e70279e9f03))
 - filter finished youtube streams under `nolive` - ([6713dc9](https://github.com/deadnews/rss2tg/commit/6713dc9d50574f0fd76bdd168ddc95252ec528f9))
 - clear auto-pinned forum topic-creation message - ([e78e575](https://github.com/deadnews/rss2tg/commit/e78e5750ef48f462e1e05645df7060b57c5e2742))
