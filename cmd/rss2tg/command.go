@@ -307,7 +307,6 @@ func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, threadID int, isF
 }
 
 func (bot *Bot) handleList(ctx context.Context, chatID int64, threadID int, isForum, isPrivate bool) {
-	// A private chat lists subs across every chat, not just its own.
 	if isPrivate {
 		bot.listAllSubs(ctx, chatID)
 		return
@@ -435,8 +434,32 @@ func formatSubCommand(sub *store.Sub) string {
 	return b.String()
 }
 
+// splitMessages packs blank-line-separated blocks into messages within limit
+// bytes, so a long reply splits rather than truncates; bytes bound the UTF-16 limit.
+func splitMessages(text string, limit int) []string {
+	var chunks []string
+	var b strings.Builder
+	for block := range strings.SplitSeq(text, "\n\n") {
+		if b.Len() > 0 && b.Len()+2+len(block) > limit { // +2 for the "\n\n" join
+			chunks = append(chunks, b.String())
+			b.Reset()
+		}
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString(block)
+	}
+	if b.Len() > 0 {
+		chunks = append(chunks, b.String())
+	}
+	return chunks
+}
+
+// reply sends text to a chat, splitting long replies across several messages.
 func (bot *Bot) reply(ctx context.Context, chatID int64, threadID int, text string) {
-	if err := bot.tg.SendMessage(ctx, chatID, threadID, format.TruncateHTML(text, format.MessageLimit), true); err != nil {
-		slog.Error("Failed to send message", "error", err, "chat_id", chatID)
+	for _, chunk := range splitMessages(text, format.MessageLimit) {
+		if err := bot.tg.SendMessage(ctx, chatID, threadID, format.TruncateHTML(chunk, format.MessageLimit), true); err != nil {
+			slog.Error("Failed to send message", "error", err, "chat_id", chatID)
+		}
 	}
 }

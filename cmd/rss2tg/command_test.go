@@ -1,12 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/deadnews/rss2tg/internal/format"
 	"github.com/deadnews/rss2tg/internal/store"
 	"github.com/deadnews/rss2tg/internal/telegram"
 )
@@ -196,7 +198,6 @@ func TestHandleSubInTopicRoutesToThread(t *testing.T) {
 	require.Len(t, sent, 1)
 	assert.Equal(t, 5, sent[0].ThreadID, "reply should go to the originating topic")
 
-	// Sub is scoped to the topic, not the General feed.
 	topic, err := tb.store.ListSubs(100, 5)
 	require.NoError(t, err)
 	require.Len(t, topic, 1)
@@ -580,7 +581,6 @@ func TestHandleListInPrivateShowsFeedTitles(t *testing.T) {
 
 func TestHandleListInPrivateFallsBackToChatID(t *testing.T) {
 	tb := newTestCmdBot(t)
-	// Without a getChat handler, the lookup fails and the ID is used.
 	_, err := tb.store.AddSub(-100, 0, &store.Sub{URL: "https://a.com/feed", Format: "link"})
 	require.NoError(t, err)
 
@@ -632,7 +632,6 @@ func TestHandleSubNormalizesTrailingSlash(t *testing.T) {
 		Chat: telegram.Chat{ID: 100},
 		Text: "/sub " + feedURL,
 	})
-	// Same feed with a trailing slash must update, not add a second sub.
 	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
@@ -644,6 +643,51 @@ func TestHandleSubNormalizesTrailingSlash(t *testing.T) {
 	require.Len(t, subs, 1)
 	assert.Equal(t, feedURL, subs[0].URL)
 	assert.Equal(t, "pw", subs[0].Format)
+}
+
+func TestHandleListInPrivateSplitsLongOutput(t *testing.T) {
+	tb := newTestCmdBot(t)
+	tb.serveChat(map[int64]string{-100: "Big Group"})
+
+	for i := range 60 {
+		url := fmt.Sprintf("https://example.com/some/rather/long/feed/path/segment/number-%02d.xml", i)
+		_, err := tb.store.AddSub(-100, 0, &store.Sub{URL: url, Title: fmt.Sprintf("Feed number %02d", i), Format: "link"})
+		require.NoError(t, err)
+	}
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 42, Type: "private"},
+		Text: "/list",
+	})
+
+	sent := tb.getSent()
+	require.Greater(t, len(sent), 1, "long list must span multiple messages")
+
+	var all strings.Builder
+	for _, m := range sent {
+		assert.LessOrEqual(t, len(m.Text), format.MessageLimit)
+		assert.NotContains(t, m.Text, "…", "no message should be truncated")
+		all.WriteString(m.Text)
+	}
+	for i := range 60 {
+		assert.Contains(t, all.String(), fmt.Sprintf("number-%02d.xml", i), "every feed must appear")
+	}
+}
+
+func TestSplitMessages(t *testing.T) {
+	text := "● A\n\nT1\n/sub1\n\nT2\n/sub2\n"
+
+	chunks := splitMessages(text, format.MessageLimit)
+	require.Len(t, chunks, 1)
+	assert.Equal(t, text, chunks[0])
+
+	chunks = splitMessages(text, 12)
+	require.Greater(t, len(chunks), 1)
+	for _, c := range chunks {
+		assert.LessOrEqual(t, len(c), 12)
+	}
+	assert.Equal(t, text, strings.Join(chunks, "\n\n"))
 }
 
 func TestNormalizeURL(t *testing.T) {
