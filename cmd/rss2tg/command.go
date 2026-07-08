@@ -356,27 +356,22 @@ func (bot *Bot) listAllSubs(ctx context.Context, chatID int64) {
 	}
 
 	slices.SortFunc(subs, func(a, b store.ChatFeed) int {
-		return cmp.Or(cmp.Compare(a.ChatID, b.ChatID), cmp.Compare(a.ThreadID, b.ThreadID))
+		return cmp.Or(cmp.Compare(a.ChatID, b.ChatID), cmp.Compare(a.Title, b.Title), cmp.Compare(a.URL, b.URL))
 	})
 
 	labels := make(map[int64]string)
 	var b strings.Builder
 	for i := range subs {
 		cf := &subs[i]
-		if i == 0 || cf.ChatID != subs[i-1].ChatID || cf.ThreadID != subs[i-1].ThreadID {
+		if i == 0 || cf.ChatID != subs[i-1].ChatID {
 			if i > 0 {
 				b.WriteString("\n")
 			}
-			b.WriteString("<b>")
+			b.WriteString("● <b>")
 			b.WriteString(html.EscapeString(bot.chatLabel(ctx, labels, cf.ChatID)))
-			b.WriteString("</b>")
-			if cf.ThreadID != 0 {
-				b.WriteString(" (topic ")
-				b.WriteString(strconv.Itoa(cf.ThreadID))
-				b.WriteString(")")
-			}
-			b.WriteString("\n")
+			b.WriteString("</b>\n")
 		}
+		b.WriteString("\n")
 		writeSub(&b, &cf.Sub)
 	}
 

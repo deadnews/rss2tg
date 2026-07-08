@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -549,11 +550,12 @@ func TestHandleListInPrivateListsEveryChat(t *testing.T) {
 	assert.Equal(t, 0, sent[0].ThreadID)
 	msg := sent[0].Text
 	assert.Contains(t, msg, "<b>News Group</b>")
-	assert.Contains(t, msg, "(topic 5)")
 	assert.Contains(t, msg, "<b>Dev Group</b>")
 	assert.Contains(t, msg, "https://a.com/feed")
 	assert.Contains(t, msg, "https://b.com/feed")
 	assert.Contains(t, msg, "https://c.com/feed")
+
+	assert.Equal(t, 1, strings.Count(msg, "News Group"), "chat header appears once, not per topic")
 }
 
 func TestHandleListInPrivateShowsFeedTitles(t *testing.T) {
