@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.0.1-alpha.15](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.15) - 2026-07-08
+## [0.0.1-alpha.16](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.16) - 2026-07-08
 
 ### Features
 
@@ -14,6 +14,7 @@
 
 ### Bug fixes
 
+- split long replies across messages - ([2ce9f6c](https://github.com/deadnews/rss2tg/commit/2ce9f6cd5e25c9b351b69ebd05d22605a73d99f7))
 - dedupe feeds differing only by a trailing slash - ([4d7fde4](https://github.com/deadnews/rss2tg/commit/4d7fde4746e89c9f7d756ddad693b7d47387ad8c))
 - list every chat’s subscriptions from a direct message - ([56cf66c](https://github.com/deadnews/rss2tg/commit/56cf66cea062b6b2052fc8439a7f3dbdf41acaa9))
 - deliver initial entries feed-wide - ([0e6f91c](https://github.com/deadnews/rss2tg/commit/0e6f91c14acb3134ca4d15b90f110d392b53e5f0))
