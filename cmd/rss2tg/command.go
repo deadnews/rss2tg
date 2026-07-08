@@ -170,6 +170,7 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, threadID int, isFor
 		bot.reply(ctx, chatID, threadID, "Failed to subscribe.")
 		return
 	}
+	url = normalizeURL(url)
 
 	feed, err := bot.parseFeed(ctx, url)
 	if err != nil {
@@ -274,6 +275,7 @@ func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, threadID int, isF
 		bot.reply(ctx, chatID, threadID, "Failed to unsubscribe.")
 		return
 	}
+	url = normalizeURL(url)
 
 	// From General, remove from the feed's own topic but reply in General.
 	target := threadID
@@ -390,6 +392,11 @@ func (bot *Bot) chatLabel(ctx context.Context, cache map[int64]string, chatID in
 	}
 	cache[chatID] = label
 	return label
+}
+
+// normalizeURL trims trailing slashes so a feed and its slash variant are one sub.
+func normalizeURL(url string) string {
+	return strings.TrimRight(url, "/")
 }
 
 // writeSub renders a sub as an optional bold title above its /sub line.

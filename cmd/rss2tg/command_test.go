@@ -623,6 +623,43 @@ func TestHandleListEmpty(t *testing.T) {
 	assert.Contains(t, sent[0].Text, "No subscriptions")
 }
 
+func TestHandleSubNormalizesTrailingSlash(t *testing.T) {
+	tb := newTestCmdBot(t)
+	feedURL := tb.ts.URL + "/cmd.xml"
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 100},
+		Text: "/sub " + feedURL,
+	})
+	// Same feed with a trailing slash must update, not add a second sub.
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 100},
+		Text: "/sub " + feedURL + "/ pw",
+	})
+
+	subs, err := tb.store.ListSubs(100, 0)
+	require.NoError(t, err)
+	require.Len(t, subs, 1)
+	assert.Equal(t, feedURL, subs[0].URL)
+	assert.Equal(t, "pw", subs[0].Format)
+}
+
+func TestNormalizeURL(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"https://a.com/feed", "https://a.com/feed"},
+		{"https://a.com/feed/", "https://a.com/feed"},
+		{"https://a.com/feed//", "https://a.com/feed"},
+		{"https://a.com/", "https://a.com"},
+	}
+	for _, tc := range tests {
+		assert.Equal(t, tc.want, normalizeURL(tc.in))
+	}
+}
+
 func TestParseSubArgs(t *testing.T) {
 	tests := []struct {
 		name string
