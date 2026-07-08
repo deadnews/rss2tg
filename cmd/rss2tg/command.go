@@ -341,8 +341,7 @@ func (bot *Bot) handleList(ctx context.Context, chatID int64, threadID int, isFo
 	bot.reply(ctx, chatID, threadID, b.String())
 }
 
-// listAllSubs replies with every subscription across all chats,
-// grouped by chat and topic.
+// listAllSubs replies with every subscription across all chats, grouped by chat.
 func (bot *Bot) listAllSubs(ctx context.Context, chatID int64) {
 	subs, err := bot.store.AllSubs()
 	if err != nil {
