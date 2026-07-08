@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.0.1-alpha.14](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.14) - 2026-07-08
+## [0.0.1-alpha.15](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.15) - 2026-07-08
 
 ### Features
 
@@ -14,6 +14,7 @@
 
 ### Bug fixes
 
+- dedupe feeds differing only by a trailing slash - ([4d7fde4](https://github.com/deadnews/rss2tg/commit/4d7fde4746e89c9f7d756ddad693b7d47387ad8c))
 - list every chat’s subscriptions from a direct message - ([56cf66c](https://github.com/deadnews/rss2tg/commit/56cf66cea062b6b2052fc8439a7f3dbdf41acaa9))
 - deliver initial entries feed-wide - ([0e6f91c](https://github.com/deadnews/rss2tg/commit/0e6f91c14acb3134ca4d15b90f110d392b53e5f0))
 - route general-topic `/unsub` - ([e5c7b4a](https://github.com/deadnews/rss2tg/commit/e5c7b4a1c7e1bcdd77df1fe2f16ec873ae4230ad))
@@ -33,6 +34,7 @@
 
 ### Documentation
 
+- _(readme)_ update - ([762b423](https://github.com/deadnews/rss2tg/commit/762b4236b1b71158ac74b2a038a0967eae2fd4a0))
 - _(readme)_ update - ([225f242](https://github.com/deadnews/rss2tg/commit/225f24241d09cd1ddc4144d06d867ea1f3b69132))
 
 ### Dependencies
