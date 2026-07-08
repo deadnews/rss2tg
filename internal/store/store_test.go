@@ -96,33 +96,6 @@ func TestRemoveSub(t *testing.T) {
 	assert.False(t, existed)
 }
 
-func TestSetFormat(t *testing.T) {
-	s := testStore(t)
-
-	_, err := s.AddSub(100, 0, &Sub{URL: "https://a.com/feed", Format: "link"})
-	require.NoError(t, err)
-	_, err = s.AddSub(100, 0, &Sub{URL: "https://b.com/feed", Format: "link"})
-	require.NoError(t, err)
-
-	count, err := s.SetFormat(100, 0, "pw")
-	require.NoError(t, err)
-	assert.Equal(t, 2, count)
-
-	subs, err := s.ListSubs(100, 0)
-	require.NoError(t, err)
-	for _, sub := range subs {
-		assert.Equal(t, "pw", sub.Format)
-	}
-}
-
-func TestSetFormatNoSubs(t *testing.T) {
-	s := testStore(t)
-
-	count, err := s.SetFormat(999, 0, "pw")
-	require.NoError(t, err)
-	assert.Equal(t, 0, count)
-}
-
 func TestAllFeeds(t *testing.T) {
 	s := testStore(t)
 
@@ -261,22 +234,6 @@ func TestAddSubRoundTripsShorts(t *testing.T) {
 	require.Len(t, subs, 1)
 	assert.Equal(t, "pw", subs[0].Format)
 	assert.True(t, subs[0].Shorts)
-}
-
-func TestSetFormatPreservesShorts(t *testing.T) {
-	s := testStore(t)
-
-	_, err := s.AddSub(100, 0, &Sub{URL: "https://yt/feed", Format: "link", Shorts: true})
-	require.NoError(t, err)
-
-	_, err = s.SetFormat(100, 0, "pw")
-	require.NoError(t, err)
-
-	subs, err := s.ListSubs(100, 0)
-	require.NoError(t, err)
-	require.Len(t, subs, 1)
-	assert.Equal(t, "pw", subs[0].Format)
-	assert.True(t, subs[0].Shorts, "Shorts flag should be preserved across SetFormat")
 }
 
 func TestSeenTracking(t *testing.T) {

@@ -34,13 +34,12 @@ See [`compose.dev.yml`](compose.dev.yml) for a Compose reference.
 
 ## Commands
 
-| Command                                                                         | Description                     |
-| ------------------------------------------------------------------------------- | ------------------------------- |
-| `/sub <url> [link\|pw\|text] [shorts] [nolive] [exclude:w1,w2] [include:w1,w2]` | Subscribe current chat to feed  |
-| `/unsub <url>`                                                                  | Unsubscribe from feed           |
-| `/list`                                                                         | List subscriptions              |
-| `/format <link\|pw\|text>`                                                      | Change format for all chat subs |
-| `/help`                                                                         | Show available commands         |
+| Command                                                                         | Description                    |
+| ------------------------------------------------------------------------------- | ------------------------------ |
+| `/sub <url> [link\|pw\|text] [shorts] [nolive] [exclude:w1,w2] [include:w1,w2]` | Subscribe current chat to feed |
+| `/unsub <url>`                                                                  | Unsubscribe from feed          |
+| `/list`                                                                         | List subscriptions             |
+| `/help`                                                                         | Show available commands        |
 
 ```text
 /sub https://example.com/feed.xml pw exclude:crypto,ai

@@ -38,7 +38,6 @@ const helpText = `<b>Available commands:</b>
 <code>/sub &lt;url&gt; [link|pw|text] [shorts] [nolive] [exclude:w1,w2] [include:w1,w2]</code> — subscribe to feed
 <code>/unsub &lt;url&gt;</code> — unsubscribe from feed
 <code>/list</code> — list subscriptions
-<code>/format &lt;link|pw|text&gt;</code> — change format for all subs
 <code>/help</code> — show this message
 
 <b>Feeds</b>
@@ -87,8 +86,6 @@ func (bot *Bot) handleCommand(ctx context.Context, msg *telegram.Message) {
 		bot.handleUnsub(ctx, msg.Chat.ID, threadID, msg.Chat.IsForum, parts[1:])
 	case "/list":
 		bot.handleList(ctx, msg.Chat.ID, threadID, msg.Chat.IsForum, msg.Chat.Type == "private")
-	case "/format":
-		bot.handleFormat(ctx, msg.Chat.ID, threadID, parts[1:])
 	}
 }
 
@@ -107,9 +104,8 @@ func (bot *Bot) authorized(ctx context.Context, msg *telegram.Message) bool {
 }
 
 const (
-	subUsage    = "Usage: /sub &lt;url&gt; [link|pw|text] [shorts] [nolive] [exclude:w1,w2] [include:w1,w2]"
-	unsubUsage  = "Usage: /unsub &lt;url&gt;"
-	formatUsage = "Usage: /format &lt;link|pw|text&gt;"
+	subUsage   = "Usage: /sub &lt;url&gt; [link|pw|text] [shorts] [nolive] [exclude:w1,w2] [include:w1,w2]"
+	unsubUsage = "Usage: /unsub &lt;url&gt;"
 )
 
 const (
@@ -436,22 +432,6 @@ func formatSubCommand(sub *store.Sub) string {
 		b.WriteString(strings.Join(sub.Include, ","))
 	}
 	return b.String()
-}
-
-func (bot *Bot) handleFormat(ctx context.Context, chatID int64, threadID int, args []string) {
-	if len(args) == 0 || !validFormats[args[0]] {
-		bot.reply(ctx, chatID, threadID, formatUsage)
-		return
-	}
-
-	count, err := bot.store.SetFormat(chatID, threadID, args[0])
-	if err != nil {
-		slog.Error("Failed to set format", "error", err)
-		bot.reply(ctx, chatID, threadID, "Failed to set format.")
-		return
-	}
-
-	bot.reply(ctx, chatID, threadID, fmt.Sprintf("Updated %d subscription(s) to %s", count, args[0]))
 }
 
 func (bot *Bot) reply(ctx context.Context, chatID int64, threadID int, text string) {

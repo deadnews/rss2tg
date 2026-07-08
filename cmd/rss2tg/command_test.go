@@ -621,55 +621,6 @@ func TestHandleListEmpty(t *testing.T) {
 	assert.Contains(t, sent[0].Text, "No subscriptions")
 }
 
-func TestHandleFormat(t *testing.T) {
-	tb := newTestCmdBot(t)
-
-	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: "https://a.com/feed", Format: "link"})
-	require.NoError(t, err)
-
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/format pw",
-	})
-
-	sent := tb.getSent()
-	require.Len(t, sent, 1)
-	assert.Contains(t, sent[0].Text, "Updated 1")
-
-	subs, err := tb.store.ListSubs(100, 0)
-	require.NoError(t, err)
-	assert.Equal(t, "pw", subs[0].Format)
-}
-
-func TestHandleFormatNoArgs(t *testing.T) {
-	tb := newTestCmdBot(t)
-
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/format",
-	})
-
-	sent := tb.getSent()
-	require.Len(t, sent, 1)
-	assert.Contains(t, sent[0].Text, "Usage")
-}
-
-func TestHandleFormatInvalidArg(t *testing.T) {
-	tb := newTestCmdBot(t)
-
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/format invalid",
-	})
-
-	sent := tb.getSent()
-	require.Len(t, sent, 1)
-	assert.Contains(t, sent[0].Text, "Usage")
-}
-
 func TestParseSubArgs(t *testing.T) {
 	tests := []struct {
 		name string

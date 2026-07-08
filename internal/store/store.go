@@ -152,39 +152,6 @@ func (s *Store) ListSubs(chatID int64, threadID int) ([]Sub, error) {
 	return subs, nil
 }
 
-// SetFormat updates the format for all subscriptions in a chat topic, preserving other options.
-func (s *Store) SetFormat(chatID int64, threadID int, format string) (int, error) {
-	var count int
-
-	err := s.db.Update(func(tx *bolt.Tx) error {
-		chat := tx.Bucket(bucketSubs).Bucket(chatKey(chatID, threadID))
-		if chat == nil {
-			return nil
-		}
-		subs, err := collectSubs(chat)
-		if err != nil {
-			return fmt.Errorf("collecting subscriptions: %w", err)
-		}
-		count = len(subs)
-		for _, sub := range subs {
-			sub.Format = format
-			val, err := json.Marshal(sub)
-			if err != nil {
-				return fmt.Errorf("encoding sub: %w", err)
-			}
-			if err := chat.Put([]byte(sub.URL), val); err != nil {
-				return fmt.Errorf("writing subscription: %w", err)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return 0, fmt.Errorf("setting format: %w", err)
-	}
-
-	return count, nil
-}
-
 // ChatFeed pairs a chat topic with the subscription it delivers.
 type ChatFeed struct {
 	ChatID   int64
