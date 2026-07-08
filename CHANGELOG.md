@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.0.1-alpha.13](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.13) - 2026-07-07
+## [0.0.1-alpha.14](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.14) - 2026-07-08
 
 ### Features
 
@@ -14,6 +14,7 @@
 
 ### Bug fixes
 
+- list every chat’s subscriptions from a direct message - ([56cf66c](https://github.com/deadnews/rss2tg/commit/56cf66cea062b6b2052fc8439a7f3dbdf41acaa9))
 - deliver initial entries feed-wide - ([0e6f91c](https://github.com/deadnews/rss2tg/commit/0e6f91c14acb3134ca4d15b90f110d392b53e5f0))
 - route general-topic `/unsub` - ([e5c7b4a](https://github.com/deadnews/rss2tg/commit/e5c7b4a1c7e1bcdd77df1fe2f16ec873ae4230ad))
 - default `RSS2TG_INTERVAL` to 10m - ([7b1089c](https://github.com/deadnews/rss2tg/commit/7b1089cf882ad699af37962c5bf00e70279e9f03))
@@ -27,6 +28,7 @@
 
 ### Refactor
 
+- remove `/format` bulk-format command - ([cf15b07](https://github.com/deadnews/rss2tg/commit/cf15b0735f53a49529e3db0eb7fba2c6e6632dc1))
 - simplify - ([392dcb1](https://github.com/deadnews/rss2tg/commit/392dcb19c47085a954e0df7c182d9066bd5a71ff))
 
 ### Documentation
