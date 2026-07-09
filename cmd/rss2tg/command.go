@@ -210,13 +210,14 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, threadID int, isFor
 	bot.reply(ctx, chatID, threadID, fmt.Sprintf("%s %s (%s)", verb, html.EscapeString(url), sub.Format))
 
 	// Deliver to every chat subscribed to the URL.
-	chats := []store.ChatFeed{sub.ChatFeed(chatID, threadID)}
+	newChat := sub.ChatFeed(chatID, threadID)
+	chats := []store.ChatFeed{newChat}
 	if feeds, err := bot.store.AllFeeds(); err == nil {
 		chats = feeds[url]
 	} else {
 		slog.Error("Failed to get feeds", "error", err)
 	}
-	bot.deliverInitialEntries(ctx, url, feed, chats)
+	bot.deliverInitialEntries(ctx, url, feed, &newChat, chats)
 }
 
 // forumTopicFor returns the feed's existing topic or creates one named after it.
@@ -252,10 +253,15 @@ func (bot *Bot) clearTopicCreationPin(ctx context.Context, msg *telegram.Message
 	}
 }
 
-// deliverInitialEntries delivers the latest initialSendLimit entries
-// and marks the rest seen, to avoid flooding a new subscriber.
-func (bot *Bot) deliverInitialEntries(ctx context.Context, feedURL string, feed *gofeed.Feed, chats []store.ChatFeed) {
-	for _, item := range feed.Items[min(len(feed.Items), initialSendLimit):] {
+// deliverInitialEntries delivers the newest initialSendLimit entries the new
+// subscriber's filters accept and marks the rest seen, to avoid flooding.
+func (bot *Bot) deliverInitialEntries(ctx context.Context, feedURL string, feed *gofeed.Feed, newChat *store.ChatFeed, chats []store.ChatFeed) {
+	remaining := initialSendLimit
+	for _, item := range feed.Items {
+		if remaining > 0 && accepts(item, newChat) {
+			remaining--
+			continue
+		}
 		if err := bot.store.MarkSeen(feedURL, itemGUID(item)); err != nil {
 			slog.Error("Failed to mark seen", "url", feedURL, "error", err)
 		}

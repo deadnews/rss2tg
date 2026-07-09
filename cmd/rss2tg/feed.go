@@ -98,19 +98,21 @@ func (bot *Bot) deliverNew(ctx context.Context, feedURL string, feed *gofeed.Fee
 
 // recipientsFor returns the chats whose shorts and title filters accept the item.
 func recipientsFor(item *gofeed.Item, chats []store.ChatFeed) []*store.ChatFeed {
-	isShort := youtube.IsShort(item.Link)
 	recipients := make([]*store.ChatFeed, 0, len(chats))
 	for i := range chats {
-		chat := &chats[i]
-		if isShort && !chat.Shorts {
-			continue
+		if accepts(item, &chats[i]) {
+			recipients = append(recipients, &chats[i])
 		}
-		if !allow(item.Title, chat.Include, chat.Exclude) {
-			continue
-		}
-		recipients = append(recipients, chat)
 	}
 	return recipients
+}
+
+// accepts reports whether the chat's shorts and title filters accept the item.
+func accepts(item *gofeed.Item, chat *store.ChatFeed) bool {
+	if youtube.IsShort(item.Link) && !chat.Shorts {
+		return false
+	}
+	return allow(item.Title, chat.Include, chat.Exclude)
 }
 
 func (bot *Bot) sendEntry(ctx context.Context, item *gofeed.Item, feedTitle, feedLink, meta string, chat *store.ChatFeed) error {

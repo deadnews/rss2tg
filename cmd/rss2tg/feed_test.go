@@ -272,9 +272,42 @@ func TestSubscribeFeedSendsOnlyLatest(t *testing.T) {
 	feedURL := tb.ts.URL + "/seed.xml"
 	feed, err := tb.bot.parseFeed(t.Context(), feedURL)
 	require.NoError(t, err)
-	tb.bot.deliverInitialEntries(t.Context(), feedURL, feed, []store.ChatFeed{{ChatID: 100, Sub: store.Sub{Format: "link"}}})
+	chat := store.ChatFeed{ChatID: 100, Sub: store.Sub{Format: "link"}}
+	tb.bot.deliverInitialEntries(t.Context(), feedURL, feed, &chat, []store.ChatFeed{chat})
 
 	assert.Len(t, tb.getSent(), initialSendLimit)
+
+	for _, guid := range []string{"1", "2", "3", "4", "5"} {
+		seen, err := tb.store.IsSeen(feedURL, guid)
+		require.NoError(t, err)
+		assert.True(t, seen, "guid %s should be seen after subscribe", guid)
+	}
+}
+
+func TestSubscribeInitialSendSkipsFilteredEntries(t *testing.T) {
+	const rss = `<?xml version="1.0"?>
+<rss version="2.0"><channel><title>T</title>
+<item><title>Skip One</title><link>https://e.com/1</link><guid>1</guid></item>
+<item><title>Skip Two</title><link>https://e.com/2</link><guid>2</guid></item>
+<item><title>Keep Three</title><link>https://e.com/3</link><guid>3</guid></item>
+<item><title>Keep Four</title><link>https://e.com/4</link><guid>4</guid></item>
+<item><title>Keep Five</title><link>https://e.com/5</link><guid>5</guid></item>
+</channel></rss>`
+
+	tb := newTestFeedBot(t)
+	tb.serveXML("/seed.xml", []byte(rss))
+
+	feedURL := tb.ts.URL + "/seed.xml"
+	feed, err := tb.bot.parseFeed(t.Context(), feedURL)
+	require.NoError(t, err)
+	chat := store.ChatFeed{ChatID: 100, Sub: store.Sub{Format: "link", Exclude: []string{"skip"}}}
+	tb.bot.deliverInitialEntries(t.Context(), feedURL, feed, &chat, []store.ChatFeed{chat})
+
+	sent := tb.getSent()
+	require.Len(t, sent, initialSendLimit)
+	assert.Contains(t, sent[0].Text, "https://e.com/5")
+	assert.Contains(t, sent[1].Text, "https://e.com/4")
+	assert.Contains(t, sent[2].Text, "https://e.com/3")
 
 	for _, guid := range []string{"1", "2", "3", "4", "5"} {
 		seen, err := tb.store.IsSeen(feedURL, guid)
