@@ -203,16 +203,12 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, threadID int, isFor
 		return
 	}
 
-	verb := "Subscribed to"
-	if existed {
-		verb = "Updated subscription for"
-	}
-	bot.reply(ctx, chatID, threadID, fmt.Sprintf("%s %s (%s)", verb, html.EscapeString(url), sub.Format))
-
 	// An update only changes options; new entries wait for the next poll cycle.
 	if existed {
+		bot.reply(ctx, chatID, threadID, fmt.Sprintf("Updated subscription for %s (%s)", html.EscapeString(url), sub.Format))
 		return
 	}
+	bot.reply(ctx, chatID, threadID, fmt.Sprintf("Subscribed to %s (%s)", html.EscapeString(url), sub.Format))
 
 	// Deliver to every chat subscribed to the URL.
 	newChat := sub.ChatFeed(chatID, threadID)

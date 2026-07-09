@@ -264,10 +264,7 @@ func TestSubscribeFeedSendsOnlyLatest(t *testing.T) {
 </channel></rss>`
 
 	tb := newTestFeedBot(t)
-	tb.mux.HandleFunc("/seed.xml", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/xml")
-		_, _ = w.Write([]byte(rss))
-	})
+	tb.serveXML("/seed.xml", []byte(rss))
 
 	feedURL := tb.ts.URL + "/seed.xml"
 	feed, err := tb.bot.parseFeed(t.Context(), feedURL)

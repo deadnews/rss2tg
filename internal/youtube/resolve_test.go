@@ -80,8 +80,6 @@ func TestFetchChannelPage(t *testing.T) {
 }
 
 func TestResolveURLHandleNotFound(t *testing.T) {
-	// /@handle/ path on a non-YouTube host falls through the YouTube-host
-	// gate before reaching the network — covers the early-return branch.
 	got, err := ResolveURL(t.Context(), "https://example.com/@somehandle")
 	require.NoError(t, err)
 	assert.Equal(t, "https://example.com/@somehandle", got)
@@ -95,7 +93,6 @@ func TestResolveURLChannelTrailingPath(t *testing.T) {
 }
 
 func TestResolveURLChannelNonUC(t *testing.T) {
-	// /channel/ with non-UC id should fall through to handle check and return raw.
 	in := "https://www.youtube.com/channel/notUCprefixed"
 	got, err := ResolveURL(t.Context(), in)
 	require.NoError(t, err)
