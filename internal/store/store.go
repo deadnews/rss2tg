@@ -283,7 +283,7 @@ func (s *Store) MarkSeen(feedURL, guid string) error {
 			return fmt.Errorf("creating seen feed bucket: %w", err)
 		}
 		ts := make([]byte, 8)
-		binary.BigEndian.PutUint64(ts, uint64(time.Now().Unix()))
+		binary.BigEndian.PutUint64(ts, uint64(time.Now().Unix())) //nolint:gosec // G115
 		return feed.Put([]byte(guid), ts)
 	})
 	if err != nil {
@@ -333,19 +333,19 @@ func (s *Store) TrimSeen(feedURL string, keep int) error {
 func chatKey(chatID int64, threadID int) []byte {
 	if threadID == 0 {
 		b := make([]byte, 8)
-		binary.BigEndian.PutUint64(b, uint64(chatID))
+		binary.BigEndian.PutUint64(b, uint64(chatID)) //nolint:gosec // G115
 		return b
 	}
 	b := make([]byte, 16)
-	binary.BigEndian.PutUint64(b[:8], uint64(chatID))
-	binary.BigEndian.PutUint64(b[8:], uint64(threadID))
+	binary.BigEndian.PutUint64(b[:8], uint64(chatID))   //nolint:gosec // G115
+	binary.BigEndian.PutUint64(b[8:], uint64(threadID)) //nolint:gosec // G115
 	return b
 }
 
 func parseChatKey(b []byte) (chatID int64, threadID int) {
-	chatID = int64(binary.BigEndian.Uint64(b[:8]))
+	chatID = int64(binary.BigEndian.Uint64(b[:8])) //nolint:gosec // G115
 	if len(b) >= 16 {
-		threadID = int(binary.BigEndian.Uint64(b[8:]))
+		threadID = int(binary.BigEndian.Uint64(b[8:])) //nolint:gosec // G115
 	}
 	return chatID, threadID
 }

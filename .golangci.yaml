@@ -82,9 +82,6 @@ linters:
         - shadow
     nolintlint:
       require-specific: true
-    gosec:
-      excludes:
-        - G115 # Integer overflow conversion
   exclusions:
     rules:
       - source: "^\\s*defer\\s+"
