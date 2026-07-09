@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -794,6 +796,47 @@ func TestHandleSubResubReplies(t *testing.T) {
 	require.GreaterOrEqual(t, len(sent), 2)
 	assert.Contains(t, sent[0].Text, "Subscribed to")
 	assert.Contains(t, sent[1].Text, "Updated subscription for")
+}
+
+func TestHandleSubResubSkipsDelivery(t *testing.T) {
+	const item3 = `<item><title>Post Three</title><link>https://example.com/3</link><guid>guid-3</guid></item>`
+
+	var feedXML atomic.Pointer[string]
+	rss := testRSS
+	feedXML.Store(&rss)
+
+	tb := newTestBotEnv(t)
+	tb.mux.HandleFunc("/mut.xml", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = w.Write([]byte(*feedXML.Load()))
+	})
+	feedURL := tb.ts.URL + "/mut.xml"
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 100},
+		Text: "/sub " + feedURL,
+	})
+	require.Len(t, tb.getSent(), 3, "reply plus both entries on first subscribe")
+
+	extended := strings.Replace(testRSS, "<item>", item3+"<item>", 1)
+	feedXML.Store(&extended)
+	tb.resetSent()
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 100},
+		Text: "/sub " + feedURL + " pw",
+	})
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1, "update must reply without delivering entries")
+	assert.Contains(t, sent[0].Text, "Updated subscription")
+
+	tb.resetSent()
+	tb.bot.checkFeeds(t.Context())
+	sent = tb.getSent()
+	require.Len(t, sent, 1, "next poll cycle delivers the new entry")
+	assert.Contains(t, sent[0].Text, "https://example.com/3")
 }
 
 func TestHandleListRendersFilters(t *testing.T) {
