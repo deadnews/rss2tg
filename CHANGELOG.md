@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.0.1-alpha.16](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.16) - 2026-07-08
+## [0.0.1-alpha.17](https://github.com/deadnews/rss2tg/commits/v0.0.1-alpha.17) - 2026-07-09
 
 ### Features
 
@@ -14,6 +14,8 @@
 
 ### Bug fixes
 
+- deliver initial entries only on new subscriptions - ([c371381](https://github.com/deadnews/rss2tg/commit/c37138115b0d7582602cf2ca51e5bc53e91db9d0))
+- pick initial entries by the subscriber's filters - ([590738a](https://github.com/deadnews/rss2tg/commit/590738af6b29a1a202ccb5f36795427a41767a7c))
 - split long replies across messages - ([2ce9f6c](https://github.com/deadnews/rss2tg/commit/2ce9f6cd5e25c9b351b69ebd05d22605a73d99f7))
 - dedupe feeds differing only by a trailing slash - ([4d7fde4](https://github.com/deadnews/rss2tg/commit/4d7fde4746e89c9f7d756ddad693b7d47387ad8c))
 - list every chat’s subscriptions from a direct message - ([56cf66c](https://github.com/deadnews/rss2tg/commit/56cf66cea062b6b2052fc8439a7f3dbdf41acaa9))
@@ -30,6 +32,7 @@
 
 ### Refactor
 
+- dedupe `/sub` reply branch - ([6b655cf](https://github.com/deadnews/rss2tg/commit/6b655cfcbb857b97eaa897c21e7e969b4d8c0e6a))
 - remove `/format` bulk-format command - ([cf15b07](https://github.com/deadnews/rss2tg/commit/cf15b0735f53a49529e3db0eb7fba2c6e6632dc1))
 - simplify - ([392dcb1](https://github.com/deadnews/rss2tg/commit/392dcb19c47085a954e0df7c182d9066bd5a71ff))
 
