@@ -44,7 +44,7 @@ func (bot *Bot) parseFeed(ctx context.Context, url string) (*gofeed.Feed, error)
 	parser.Client = bot.feedClient
 	feed, err := parser.ParseURLWithContext(url, ctx)
 	if err != nil {
-		return nil, fmt.Errorf("parsing feed: %w", err)
+		return nil, fmt.Errorf("parse feed: %w", err)
 	}
 	return feed, nil
 }

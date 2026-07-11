@@ -124,7 +124,7 @@ func (bot *Bot) sendEntry(ctx context.Context, item *gofeed.Item, feedTitle, fee
 			if err = bot.tg.SendPhoto(ctx, chat.ChatID, chat.ThreadID, img, format.TruncateHTML(caption, format.CaptionLimit)); err == nil {
 				return nil
 			}
-			slog.Warn("SendPhoto failed, falling back to message", "url", img, "error", err)
+			slog.Warn("Failed to send photo; falling back to message", "url", img, "error", err)
 		}
 		err = bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, format.TruncateHTML(caption, format.MessageLimit), false)
 	case formatText:
@@ -151,7 +151,7 @@ func (bot *Bot) videoInfo(ctx context.Context, link string) *youtube.VideoInfo {
 	}
 	info, err := youtube.FetchVideoInfo(ctx, bot.cfg.YouTubeKey, id)
 	if err != nil {
-		slog.Warn("YouTube enrichment failed", "id", id, "error", err)
+		slog.Warn("Failed to fetch YouTube info", "id", id, "error", err)
 		return nil
 	}
 	return info

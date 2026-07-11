@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"os"
 	"strconv"
@@ -41,16 +42,11 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 
-	dbPath := os.Getenv("RSS2TG_DB_PATH")
-	if dbPath == "" {
-		dbPath = "rss2tg.db"
-	}
-
 	return &Config{
 		BotToken:   token,
 		Manager:    manager,
 		Interval:   interval,
-		DBPath:     dbPath,
+		DBPath:     cmp.Or(os.Getenv("RSS2TG_DB_PATH"), "rss2tg.db"),
 		YouTubeKey: os.Getenv("RSS2TG_YOUTUBE_KEY"),
 	}, nil
 }

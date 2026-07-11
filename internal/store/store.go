@@ -37,7 +37,7 @@ type Sub struct {
 func decodeSub(url string, v []byte) (Sub, error) {
 	sub := Sub{URL: url}
 	if err := json.Unmarshal(v, &sub); err != nil {
-		return Sub{}, fmt.Errorf("decoding sub %q: %w", url, err)
+		return Sub{}, fmt.Errorf("decode sub %q: %w", url, err)
 	}
 	return sub, nil
 }
@@ -54,7 +54,7 @@ func collectSubs(chat *bolt.Bucket) ([]Sub, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("iterating subscriptions: %w", err)
+		return nil, fmt.Errorf("iterate subscriptions: %w", err)
 	}
 	return subs, nil
 }
@@ -63,21 +63,21 @@ func collectSubs(chat *bolt.Bucket) ([]Sub, error) {
 func New(path string) (*Store, error) {
 	db, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
-		return nil, fmt.Errorf("opening database: %w", err)
+		return nil, fmt.Errorf("open database: %w", err)
 	}
 
 	err = db.Update(func(tx *bolt.Tx) error {
 		if _, err := tx.CreateBucketIfNotExists(bucketSubs); err != nil {
-			return fmt.Errorf("creating subs bucket: %w", err)
+			return fmt.Errorf("create subs bucket: %w", err)
 		}
 		if _, err := tx.CreateBucketIfNotExists(bucketSeen); err != nil {
-			return fmt.Errorf("creating seen bucket: %w", err)
+			return fmt.Errorf("create seen bucket: %w", err)
 		}
 		return nil
 	})
 	if err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("initializing buckets: %w", err)
+		return nil, fmt.Errorf("init buckets: %w", err)
 	}
 
 	return &Store{db: db}, nil
@@ -86,7 +86,7 @@ func New(path string) (*Store, error) {
 // Close closes the underlying database.
 func (s *Store) Close() error {
 	if err := s.db.Close(); err != nil {
-		return fmt.Errorf("closing database: %w", err)
+		return fmt.Errorf("close database: %w", err)
 	}
 	return nil
 }
@@ -95,19 +95,19 @@ func (s *Store) Close() error {
 func (s *Store) AddSub(chatID int64, threadID int, sub *Sub) (bool, error) {
 	val, err := json.Marshal(sub)
 	if err != nil {
-		return false, fmt.Errorf("encoding sub: %w", err)
+		return false, fmt.Errorf("encode sub: %w", err)
 	}
 	var existed bool
 	err = s.db.Update(func(tx *bolt.Tx) error {
 		chat, err := tx.Bucket(bucketSubs).CreateBucketIfNotExists(chatKey(chatID, threadID))
 		if err != nil {
-			return fmt.Errorf("creating chat bucket: %w", err)
+			return fmt.Errorf("create chat bucket: %w", err)
 		}
 		existed = chat.Get([]byte(sub.URL)) != nil
 		return chat.Put([]byte(sub.URL), val)
 	})
 	if err != nil {
-		return false, fmt.Errorf("adding subscription: %w", err)
+		return false, fmt.Errorf("add subscription: %w", err)
 	}
 	return existed, nil
 }
@@ -127,7 +127,7 @@ func (s *Store) RemoveSub(chatID int64, threadID int, feedURL string) (bool, err
 		return chat.Delete([]byte(feedURL))
 	})
 	if err != nil {
-		return false, fmt.Errorf("removing subscription: %w", err)
+		return false, fmt.Errorf("remove subscription: %w", err)
 	}
 	return existed, nil
 }
@@ -146,7 +146,7 @@ func (s *Store) ListSubs(chatID int64, threadID int) ([]Sub, error) {
 		return err
 	})
 	if err != nil {
-		return nil, fmt.Errorf("listing subscriptions: %w", err)
+		return nil, fmt.Errorf("list subscriptions: %w", err)
 	}
 
 	return subs, nil
@@ -187,7 +187,7 @@ func (s *Store) AllSubs() ([]ChatFeed, error) {
 		})
 	})
 	if err != nil {
-		return nil, fmt.Errorf("listing all subscriptions: %w", err)
+		return nil, fmt.Errorf("list all subscriptions: %w", err)
 	}
 
 	return subs, nil
@@ -229,7 +229,7 @@ func (s *Store) ChatSubs(chatID int64) ([]Sub, error) {
 		})
 	})
 	if err != nil {
-		return nil, fmt.Errorf("listing chat subscriptions: %w", err)
+		return nil, fmt.Errorf("list chat subscriptions: %w", err)
 	}
 	return subs, nil
 }
@@ -251,7 +251,7 @@ func (s *Store) FindFeedThread(chatID int64, feedURL string) (threadID int, foun
 		})
 	})
 	if err != nil {
-		return 0, false, fmt.Errorf("finding feed thread: %w", err)
+		return 0, false, fmt.Errorf("find feed thread: %w", err)
 	}
 	return threadID, found, nil
 }
@@ -269,7 +269,7 @@ func (s *Store) IsSeen(feedURL, guid string) (bool, error) {
 		return nil
 	})
 	if err != nil {
-		return false, fmt.Errorf("checking seen: %w", err)
+		return false, fmt.Errorf("check seen: %w", err)
 	}
 
 	return seen, nil
@@ -280,14 +280,14 @@ func (s *Store) MarkSeen(feedURL, guid string) error {
 	err := s.db.Update(func(tx *bolt.Tx) error {
 		feed, err := tx.Bucket(bucketSeen).CreateBucketIfNotExists([]byte(feedURL))
 		if err != nil {
-			return fmt.Errorf("creating seen feed bucket: %w", err)
+			return fmt.Errorf("create seen feed bucket: %w", err)
 		}
 		ts := make([]byte, 8)
 		binary.BigEndian.PutUint64(ts, uint64(time.Now().Unix())) //nolint:gosec // G115
 		return feed.Put([]byte(guid), ts)
 	})
 	if err != nil {
-		return fmt.Errorf("marking seen: %w", err)
+		return fmt.Errorf("mark seen: %w", err)
 	}
 	return nil
 }
@@ -309,7 +309,7 @@ func (s *Store) TrimSeen(feedURL string, keep int) error {
 			entries = append(entries, entry{binary.BigEndian.Uint64(v), bytes.Clone(k)})
 			return nil
 		}); err != nil {
-			return fmt.Errorf("iterating seen entries: %w", err)
+			return fmt.Errorf("iterate seen entries: %w", err)
 		}
 		if len(entries) <= keep {
 			return nil
@@ -318,13 +318,13 @@ func (s *Store) TrimSeen(feedURL string, keep int) error {
 		slices.SortFunc(entries, func(a, b entry) int { return cmp.Compare(a.ts, b.ts) })
 		for _, e := range entries[:len(entries)-keep] {
 			if err := feed.Delete(e.key); err != nil {
-				return fmt.Errorf("deleting seen entry: %w", err)
+				return fmt.Errorf("delete seen entry: %w", err)
 			}
 		}
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("trimming seen entries: %w", err)
+		return fmt.Errorf("trim seen entries: %w", err)
 	}
 	return nil
 }

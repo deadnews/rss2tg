@@ -85,18 +85,18 @@ func FetchVideoInfo(ctx context.Context, apiKey, videoID string) (*VideoInfo, er
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL+"?"+q.Encode(), http.NoBody)
 	if err != nil {
-		return nil, fmt.Errorf("building request: %w", err)
+		return nil, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("X-Goog-Api-Key", apiKey)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetching video info: %w", err)
+		return nil, fmt.Errorf("fetch video info: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetching video info: status %d", resp.StatusCode)
+		return nil, fmt.Errorf("fetch video info: status %d", resp.StatusCode)
 	}
 
 	var body struct {
@@ -113,7 +113,7 @@ func FetchVideoInfo(ctx context.Context, apiKey, videoID string) (*VideoInfo, er
 		} `json:"items"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBody)).Decode(&body); err != nil {
-		return nil, fmt.Errorf("decoding response: %w", err)
+		return nil, fmt.Errorf("decode response: %w", err)
 	}
 	if len(body.Items) == 0 {
 		return nil, errors.New("video not found")

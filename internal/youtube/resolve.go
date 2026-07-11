@@ -85,23 +85,23 @@ func parseChannelID(body []byte) (string, bool) {
 func fetchChannelPage(ctx context.Context, pageURL string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, http.NoBody)
 	if err != nil {
-		return nil, fmt.Errorf("building request: %w", err)
+		return nil, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (rss2tg)")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetching channel page: %w", err)
+		return nil, fmt.Errorf("fetch channel page: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetching channel page: status %d", resp.StatusCode)
+		return nil, fmt.Errorf("fetch channel page: status %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
 	if err != nil {
-		return nil, fmt.Errorf("reading channel page: %w", err)
+		return nil, fmt.Errorf("read channel page: %w", err)
 	}
 	return body, nil
 }
