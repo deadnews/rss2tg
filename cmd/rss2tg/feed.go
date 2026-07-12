@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/deadnews/rss2tg/internal/format"
 	"github.com/deadnews/rss2tg/internal/store"
+	"github.com/deadnews/rss2tg/internal/telegram"
 	"github.com/deadnews/rss2tg/internal/youtube"
 )
 
@@ -22,12 +24,19 @@ func (bot *Bot) checkFeeds(ctx context.Context) {
 	}
 
 	for url, chats := range feeds {
-		feed, err := bot.parser.ParseURLWithContext(url, ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		feed, err := bot.parseFeed(ctx, url)
 		if err != nil {
 			slog.Error("Failed to parse feed", "url", url, "error", err)
 			continue
 		}
 		bot.deliverNew(ctx, url, feed, chats)
+		// Cap the seen set at twice the feed length so every served entry stays remembered.
+		if err := bot.store.TrimSeen(url, max(2*len(feed.Items), 100)); err != nil {
+			slog.Error("Failed to trim seen", "url", url, "error", err)
+		}
 	}
 }
 
@@ -46,25 +55,39 @@ func (bot *Bot) deliverNew(ctx context.Context, feedURL string, feed *gofeed.Fee
 			continue
 		}
 
-		isShort := youtube.IsShort(item.Link)
-		var attempted, delivered bool
-		for _, chat := range chats {
-			if isShort && !chat.Shorts {
-				continue
+		recipients := recipientsFor(item, chats)
+
+		var meta string
+		var isLive bool
+		if len(recipients) > 0 {
+			if info := bot.videoInfo(ctx, item.Link); info != nil {
+				meta = info.MetaLine()
+				isLive = info.Stream
 			}
-			attempted = true
-			if err := bot.sendEntry(ctx, item, feed.Title, feed.Link, chat); err != nil {
-				slog.Error("Failed to send entry",
-					"url", feedURL, "guid", guid,
-					"chat_id", chat.ChatID, "error", err,
-				)
-				continue
-			}
-			delivered = true
 		}
 
-		// Skip mark-seen only when every attempt failed (e.g. network), retry next cycle.
-		if attempted && !delivered {
+		var delivered, retryable bool
+		for _, chat := range recipients {
+			if isLive && chat.NoLive {
+				continue
+			}
+			err := bot.sendEntry(ctx, item, feed.Title, feed.Link, meta, chat)
+			var apiErr *telegram.APIError
+			switch {
+			case err == nil:
+				delivered = true
+			case errors.As(err, &apiErr):
+				slog.Warn("Dropping entry rejected by Telegram",
+					"url", feedURL, "guid", guid, "chat_id", chat.ChatID, "error", err)
+			default:
+				slog.Error("Failed to send entry",
+					"url", feedURL, "guid", guid, "chat_id", chat.ChatID, "error", err)
+				retryable = true
+			}
+		}
+
+		// Retry next cycle only when a transient failure left the entry undelivered.
+		if retryable && !delivered {
 			continue
 		}
 		if err := bot.store.MarkSeen(feedURL, guid); err != nil {
@@ -73,27 +96,65 @@ func (bot *Bot) deliverNew(ctx context.Context, feedURL string, feed *gofeed.Fee
 	}
 }
 
-func (bot *Bot) sendEntry(ctx context.Context, item *gofeed.Item, feedTitle, feedLink string, chat store.ChatFeed) error {
+// recipientsFor returns the chats whose shorts and title filters accept the item.
+func recipientsFor(item *gofeed.Item, chats []store.ChatFeed) []*store.ChatFeed {
+	recipients := make([]*store.ChatFeed, 0, len(chats))
+	for i := range chats {
+		if accepts(item, &chats[i]) {
+			recipients = append(recipients, &chats[i])
+		}
+	}
+	return recipients
+}
+
+// accepts reports whether the chat's shorts and title filters accept the item.
+func accepts(item *gofeed.Item, chat *store.ChatFeed) bool {
+	if youtube.IsShort(item.Link) && !chat.Shorts {
+		return false
+	}
+	return allow(item.Title, chat.Include, chat.Exclude)
+}
+
+func (bot *Bot) sendEntry(ctx context.Context, item *gofeed.Item, feedTitle, feedLink, meta string, chat *store.ChatFeed) error {
 	var err error
 	switch chat.Format {
 	case formatPreview:
 		caption := format.Preview(item, feedTitle, feedLink)
 		if img := format.ExtractImage(item); img != "" {
-			if err = bot.tg.SendPhoto(ctx, chat.ChatID, img, caption); err == nil {
+			if err = bot.tg.SendPhoto(ctx, chat.ChatID, chat.ThreadID, img, format.TruncateHTML(caption, format.CaptionLimit)); err == nil {
 				return nil
 			}
-			slog.Warn("SendPhoto failed, falling back to message", "url", img, "error", err)
+			slog.Warn("Failed to send photo; falling back to message", "url", img, "error", err)
 		}
-		err = bot.tg.SendMessage(ctx, chat.ChatID, caption, false)
+		err = bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, format.TruncateHTML(caption, format.MessageLimit), false)
 	case formatText:
-		err = bot.tg.SendMessage(ctx, chat.ChatID, format.Text(item), true)
+		err = bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, format.TruncateHTML(format.Text(item), format.MessageLimit), true)
 	default:
-		err = bot.tg.SendMessage(ctx, chat.ChatID, format.Link(item), false)
+		text := format.Link(item, meta)
+		err = bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, format.TruncateHTML(text, format.MessageLimit), false)
 	}
 	if err != nil {
 		return fmt.Errorf("send entry: %w", err)
 	}
 	return nil
+}
+
+// videoInfo fetches YouTube metadata for a link, or nil on missing key,
+// non-YouTube link, or API error (the entry then sends unenriched).
+func (bot *Bot) videoInfo(ctx context.Context, link string) *youtube.VideoInfo {
+	if bot.cfg.YouTubeKey == "" {
+		return nil
+	}
+	id, ok := youtube.ExtractVideoID(link)
+	if !ok {
+		return nil
+	}
+	info, err := youtube.FetchVideoInfo(ctx, bot.cfg.YouTubeKey, id)
+	if err != nil {
+		slog.Warn("Failed to fetch YouTube info", "id", id, "error", err)
+		return nil
+	}
+	return info
 }
 
 func itemGUID(item *gofeed.Item) string {

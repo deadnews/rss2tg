@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
@@ -14,8 +15,9 @@ import (
 )
 
 const (
-	cleanSeenEvery = 24 * time.Hour
-	pollBackoff    = 5 * time.Second
+	pollRetryDelay   = 5 * time.Second
+	feedFetchTimeout = 40 * time.Second
+	feedMaxBytes     = 10 << 20 // 10 MiB
 )
 
 // Bot orchestrates feed checks and Telegram updates.
@@ -23,17 +25,29 @@ type Bot struct {
 	cfg    *Config
 	tg     *telegram.Client
 	store  *store.Store
-	parser *gofeed.Parser
+	parser *gofeed.Parser // shared across goroutines; configure only in NewBot
 }
 
 // NewBot creates a new Bot instance.
 func NewBot(cfg *Config, tg *telegram.Client, st *store.Store) *Bot {
+	parser := gofeed.NewParser()
+	parser.Client = &http.Client{Timeout: feedFetchTimeout}
+	parser.MaxByteSize = feedMaxBytes
 	return &Bot{
 		cfg:    cfg,
 		tg:     tg,
 		store:  st,
-		parser: gofeed.NewParser(),
+		parser: parser,
 	}
+}
+
+// parseFeed fetches and parses a feed.
+func (bot *Bot) parseFeed(ctx context.Context, url string) (*gofeed.Feed, error) {
+	feed, err := bot.parser.ParseURLWithContext(url, ctx)
+	if err != nil {
+		return nil, fmt.Errorf("parse feed: %w", err)
+	}
+	return feed, nil
 }
 
 // Run validates the bot token and runs the feed-check and update-polling loops.
@@ -62,12 +76,10 @@ func (bot *Bot) pollUpdates(ctx context.Context) {
 				return
 			}
 			slog.Error("Failed to get updates", "error", err)
-			timer := time.NewTimer(pollBackoff)
 			select {
 			case <-ctx.Done():
-				timer.Stop()
 				return
-			case <-timer.C:
+			case <-time.After(pollRetryDelay):
 			}
 			continue
 		}
@@ -78,11 +90,21 @@ func (bot *Bot) pollUpdates(ctx context.Context) {
 				msg = u.ChannelPost
 			}
 			if msg != nil {
-				bot.handleCommand(ctx, msg)
+				bot.routeMessage(ctx, msg)
 			}
 			offset = u.UpdateID + 1
 		}
 	}
+}
+
+// routeMessage clears the auto-pin on forum topic-creation messages;
+// everything else is handled as a command.
+func (bot *Bot) routeMessage(ctx context.Context, msg *telegram.Message) {
+	if msg.ForumTopicCreated != nil {
+		bot.clearTopicCreationPin(ctx, msg)
+		return
+	}
+	bot.handleCommand(ctx, msg)
 }
 
 func (bot *Bot) checkFeedsLoop(ctx context.Context) {
@@ -90,8 +112,6 @@ func (bot *Bot) checkFeedsLoop(ctx context.Context) {
 
 	feedTicker := time.NewTicker(bot.cfg.Interval)
 	defer feedTicker.Stop()
-	cleanTicker := time.NewTicker(cleanSeenEvery)
-	defer cleanTicker.Stop()
 
 	for {
 		select {
@@ -100,10 +120,6 @@ func (bot *Bot) checkFeedsLoop(ctx context.Context) {
 			return
 		case <-feedTicker.C:
 			bot.checkFeeds(ctx)
-		case <-cleanTicker.C:
-			if err := bot.store.CleanSeen(); err != nil {
-				slog.Error("Failed to clean seen entries", "error", err)
-			}
 		}
 	}
 }

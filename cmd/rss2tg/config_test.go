@@ -72,7 +72,7 @@ func TestLoadConfig(t *testing.T) {
 				t.Helper()
 				assert.Equal(t, "123:abc", cfg.BotToken)
 				assert.Equal(t, int64(12345), cfg.Manager)
-				assert.Equal(t, 5*time.Minute, cfg.Interval)
+				assert.Equal(t, 10*time.Minute, cfg.Interval)
 				assert.Equal(t, "rss2tg.db", cfg.DBPath)
 			},
 		},

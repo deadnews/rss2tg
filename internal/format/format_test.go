@@ -11,13 +11,13 @@ import (
 func TestLink(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		item := &gofeed.Item{Title: "Hello World", Link: "https://example.com/post"}
-		got := Link(item)
-		assert.Equal(t, `<a href="https://example.com/post"><b>Hello World</b></a>`, got)
+		got := Link(item, "")
+		assert.Equal(t, "<b>Hello World</b>\nhttps://example.com/post", got)
 	})
 
 	t.Run("escapes HTML in title", func(t *testing.T) {
 		item := &gofeed.Item{Title: "A <b>bold</b> & title", Link: "https://example.com"}
-		got := Link(item)
+		got := Link(item, "")
 		assert.Contains(t, got, "&lt;b&gt;bold&lt;/b&gt;")
 		assert.Contains(t, got, "&amp; title")
 		assert.Contains(t, got, "<b>")
@@ -25,8 +25,14 @@ func TestLink(t *testing.T) {
 
 	t.Run("falls back to link when no title", func(t *testing.T) {
 		item := &gofeed.Item{Link: "https://example.com/page"}
-		got := Link(item)
-		assert.Contains(t, got, "https://example.com/page")
+		got := Link(item, "")
+		assert.Equal(t, "https://example.com/page", got)
+	})
+
+	t.Run("inserts meta between title and link", func(t *testing.T) {
+		item := &gofeed.Item{Title: "Video", Link: "https://youtu.be/abc"}
+		got := Link(item, "5:33")
+		assert.Equal(t, "<b>Video</b>\n5:33\nhttps://youtu.be/abc", got)
 	})
 }
 

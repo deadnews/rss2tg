@@ -2,6 +2,7 @@
 package format
 
 import (
+	"cmp"
 	"html"
 	"regexp"
 	"strings"
@@ -19,19 +20,33 @@ var (
 	reRedditPreviewImg = regexp.MustCompile(`^https?://preview\.redd\.it/([^?]+)`)
 )
 
-// Link formats an entry as a clickable title link.
-func Link(item *gofeed.Item) string {
+// Link formats an entry as a bold title + URL;
+// meta inserts between them when non-empty.
+func Link(item *gofeed.Item, meta string) string {
+	if item.Title == "" {
+		return html.EscapeString(item.Link)
+	}
 	var b strings.Builder
-	writeBoldTitle(&b, itemTitle(item), item.Link)
+	b.WriteString("<b>")
+	b.WriteString(html.EscapeString(item.Title))
+	b.WriteString("</b>")
+	if meta != "" {
+		b.WriteString("\n")
+		b.WriteString(meta)
+	}
+	if item.Link != "" {
+		b.WriteString("\n")
+		b.WriteString(html.EscapeString(item.Link))
+	}
 	return b.String()
 }
 
 // Preview formats an entry with a clickable bold title, sanitized content, and feed attribution.
 func Preview(item *gofeed.Item, feedTitle, feedLink string) string {
 	var b strings.Builder
-	writeBoldTitle(&b, itemTitle(item), item.Link)
+	writeBoldTitle(&b, cmp.Or(item.Title, item.Link), item.Link)
 
-	if excerpt := extractExcerpt(item, maxExcerptLines); excerpt != "" {
+	if excerpt := extractExcerpt(item); excerpt != "" {
 		b.WriteString("\n\n")
 		b.WriteString(excerpt)
 	}
@@ -64,11 +79,8 @@ func Text(item *gofeed.Item) string {
 	}
 
 	// Prefer full content over summary.
-	text := item.Content
-	if text == "" {
-		text = item.Description
-	}
-	b.WriteString(strings.Join(normalizeLines(sanitizeHTML(text), 0), "\n"))
+	text := cmp.Or(item.Content, item.Description)
+	b.WriteString(normalizeText(sanitizeHTML(text), 0))
 	return b.String()
 }
 
@@ -108,17 +120,7 @@ func redditDirectURL(u string) string {
 	return u
 }
 
-func itemTitle(item *gofeed.Item) string {
-	if item.Title != "" {
-		return item.Title
-	}
-	return item.Link
-}
-
-func extractExcerpt(item *gofeed.Item, maxLines int) string {
-	text := item.Description
-	if text == "" {
-		text = item.Content
-	}
-	return strings.Join(normalizeLines(sanitizeHTML(text), maxLines), "\n")
+func extractExcerpt(item *gofeed.Item) string {
+	text := cmp.Or(item.Description, item.Content)
+	return normalizeText(sanitizeHTML(text), maxExcerptLines)
 }

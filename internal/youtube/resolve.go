@@ -1,4 +1,5 @@
-// Package youtube resolves YouTube channel/handle URLs to Atom feeds.
+// Package youtube resolves YouTube channel URLs to Atom feeds
+// and enriches video entries via the YouTube Data API.
 package youtube
 
 import (
@@ -14,8 +15,9 @@ import (
 )
 
 const (
-	feedURLBase  = "https://www.youtube.com/feeds/videos.xml?channel_id="
-	fetchTimeout = 10 * time.Second
+	feedURLBase     = "https://www.youtube.com/feeds/videos.xml?channel_id="
+	fetchTimeout    = 10 * time.Second
+	maxResponseBody = 1 << 20
 )
 
 var (
@@ -57,15 +59,14 @@ func ResolveURL(ctx context.Context, raw string) (string, error) {
 	return "", errors.New("channel ID not found in page")
 }
 
-// IsShort reports whether an entry URL is a YouTube Shorts video.
-func IsShort(link string) bool {
-	return strings.Contains(link, "youtube.com/shorts/")
+func isYouTubeHost(host string) bool {
+	return normalizeHost(host) == "youtube.com"
 }
 
-func isYouTubeHost(host string) bool {
+// normalizeHost strips the www. and m. subdomain prefixes.
+func normalizeHost(host string) string {
 	host = strings.TrimPrefix(host, "www.")
-	host = strings.TrimPrefix(host, "m.")
-	return host == "youtube.com"
+	return strings.TrimPrefix(host, "m.")
 }
 
 func isHandlePath(path string) bool {
@@ -84,23 +85,23 @@ func parseChannelID(body []byte) (string, bool) {
 func fetchChannelPage(ctx context.Context, pageURL string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, http.NoBody)
 	if err != nil {
-		return nil, fmt.Errorf("building request: %w", err)
+		return nil, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (rss2tg)")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetching channel page: %w", err)
+		return nil, fmt.Errorf("fetch channel page: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetching channel page: status %d", resp.StatusCode)
+		return nil, fmt.Errorf("fetch channel page: status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
 	if err != nil {
-		return nil, fmt.Errorf("reading channel page: %w", err)
+		return nil, fmt.Errorf("read channel page: %w", err)
 	}
 	return body, nil
 }

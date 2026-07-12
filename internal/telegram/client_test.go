@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -20,6 +21,29 @@ func testClient(t *testing.T, handler http.HandlerFunc) *Client {
 	return c
 }
 
+func TestRedactsBotTokenOnTransportError(t *testing.T) {
+	// Point at a dead listener so http.Client.Do fails with the token-bearing URL.
+	ts := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	deadURL := ts.URL
+	ts.Close()
+
+	const token = "super-secret-token"
+	c := NewClient(token)
+	c.BaseURL = deadURL
+
+	t.Run("get path", func(t *testing.T) {
+		_, err := c.GetMe(t.Context())
+		require.Error(t, err)
+		assert.NotContains(t, err.Error(), token)
+	})
+
+	t.Run("post path", func(t *testing.T) {
+		err := c.SendMessage(t.Context(), 100, 0, "hi", false)
+		require.Error(t, err)
+		assert.NotContains(t, err.Error(), token)
+	})
+}
+
 func TestGetMe(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -27,14 +51,13 @@ func TestGetMe(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(Response[User]{
 				OK:     true,
-				Result: User{ID: 123, IsBot: true, Username: "testbot"},
+				Result: User{ID: 123, Username: "testbot"},
 			})
 		})
 
 		user, err := c.GetMe(t.Context())
 		require.NoError(t, err)
 		assert.Equal(t, int64(123), user.ID)
-		assert.True(t, user.IsBot)
 		assert.Equal(t, "testbot", user.Username)
 	})
 
@@ -65,10 +88,9 @@ func TestGetUpdates(t *testing.T) {
 				OK: true,
 				Result: []Update{
 					{UpdateID: 1, Message: &Message{
-						MessageID: 10,
-						From:      &User{ID: 42},
-						Chat:      Chat{ID: 42},
-						Text:      "/help",
+						From: &User{ID: 42},
+						Chat: Chat{ID: 42},
+						Text: "/help",
 					}},
 				},
 			})
@@ -104,6 +126,42 @@ func TestGetUpdates(t *testing.T) {
 	})
 }
 
+func TestIsChatAdmin(t *testing.T) {
+	statuses := map[string]bool{
+		"creator":       true,
+		"administrator": true,
+		"member":        false,
+		"left":          false,
+		"kicked":        false,
+	}
+	for status, want := range statuses {
+		t.Run(status, func(t *testing.T) {
+			c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+				assert.Contains(t, r.URL.Path, "/getChatMember")
+				assert.Equal(t, "100", r.URL.Query().Get("chat_id"))
+				assert.Equal(t, "42", r.URL.Query().Get("user_id"))
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(Response[ChatMember]{OK: true, Result: ChatMember{Status: status}})
+			})
+
+			admin, err := c.IsChatAdmin(t.Context(), 100, 42)
+			require.NoError(t, err)
+			assert.Equal(t, want, admin)
+		})
+	}
+
+	t.Run("error response", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Response[ChatMember]{OK: false, Desc: "user not found"})
+		})
+
+		_, err := c.IsChatAdmin(t.Context(), 100, 42)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "user not found")
+	})
+}
+
 func TestSendMessage(t *testing.T) {
 	t.Run("success with preview", func(t *testing.T) {
 		c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -114,6 +172,7 @@ func TestSendMessage(t *testing.T) {
 			var payload sendMessageRequest
 			_ = json.NewDecoder(r.Body).Decode(&payload)
 			assert.Equal(t, int64(100), payload.ChatID)
+			assert.Equal(t, 0, payload.MessageThreadID)
 			assert.Equal(t, "HTML", payload.ParseMode)
 			assert.Equal(t, "<b>hello</b>", payload.Text)
 			assert.Nil(t, payload.LinkPreviewOptions)
@@ -122,7 +181,21 @@ func TestSendMessage(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: true})
 		})
 
-		err := c.SendMessage(t.Context(), 100, "<b>hello</b>", false)
+		err := c.SendMessage(t.Context(), 100, 0, "<b>hello</b>", false)
+		require.NoError(t, err)
+	})
+
+	t.Run("routes to forum topic", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			var payload sendMessageRequest
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			assert.Equal(t, 7, payload.MessageThreadID)
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: true})
+		})
+
+		err := c.SendMessage(t.Context(), 100, 7, "text", false)
 		require.NoError(t, err)
 	})
 
@@ -138,7 +211,7 @@ func TestSendMessage(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: true})
 		})
 
-		err := c.SendMessage(t.Context(), 100, "text", true)
+		err := c.SendMessage(t.Context(), 100, 0, "text", true)
 		require.NoError(t, err)
 	})
 
@@ -148,7 +221,7 @@ func TestSendMessage(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: false, Desc: "chat not found"})
 		})
 
-		err := c.SendMessage(t.Context(), 100, "text", false)
+		err := c.SendMessage(t.Context(), 100, 0, "text", false)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "chat not found")
 	})
@@ -168,9 +241,119 @@ func TestSendMessage(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: true})
 		})
 
-		err := c.SendMessage(t.Context(), 100, "text", false)
+		err := c.SendMessage(t.Context(), 100, 0, "text", false)
 		require.NoError(t, err)
 		assert.Equal(t, int32(2), attempts.Load())
+	})
+
+	t.Run("rejection is a permanent APIError", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{
+				OK: false, Desc: "Bad Request: can't parse entities",
+			})
+		})
+
+		err := c.SendMessage(t.Context(), 100, 0, "<b>bad", false)
+		var apiErr *APIError
+		require.ErrorAs(t, err, &apiErr)
+		assert.Equal(t, "sendMessage", apiErr.Method)
+	})
+
+	t.Run("persistent rate limit stays retryable", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":          false,
+				"description": "Too Many Requests: retry after 1",
+				"parameters":  map[string]any{"retry_after": 1},
+			})
+		})
+
+		err := c.SendMessage(t.Context(), 100, 0, "text", false)
+		require.Error(t, err)
+		var apiErr *APIError
+		assert.NotErrorAs(t, err, &apiErr, "persistent rate limit must not be a permanent APIError")
+	})
+}
+
+func TestCreateForumTopic(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, http.MethodPost, r.Method)
+			assert.Contains(t, r.URL.Path, "/createForumTopic")
+
+			var payload createForumTopicRequest
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			assert.Equal(t, int64(100), payload.ChatID)
+			assert.Equal(t, "News", payload.Name)
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Response[ForumTopic]{
+				OK:     true,
+				Result: ForumTopic{MessageThreadID: 55, Name: "News"},
+			})
+		})
+
+		id, err := c.CreateForumTopic(t.Context(), 100, "News")
+		require.NoError(t, err)
+		assert.Equal(t, 55, id)
+	})
+
+	t.Run("truncates long name", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			var payload createForumTopicRequest
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			assert.Len(t, []rune(payload.Name), maxForumTopicName)
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Response[ForumTopic]{OK: true, Result: ForumTopic{MessageThreadID: 1}})
+		})
+
+		_, err := c.CreateForumTopic(t.Context(), 100, strings.Repeat("x", 200))
+		require.NoError(t, err)
+	})
+
+	t.Run("error response", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: false, Desc: "not enough rights"})
+		})
+
+		_, err := c.CreateForumTopic(t.Context(), 100, "News")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not enough rights")
+	})
+}
+
+func TestUnpinAllForumTopicMessages(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, http.MethodPost, r.Method)
+			assert.Contains(t, r.URL.Path, "/unpinAllForumTopicMessages")
+
+			var payload unpinAllForumTopicMessagesRequest
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			assert.Equal(t, int64(100), payload.ChatID)
+			assert.Equal(t, 7, payload.MessageThreadID)
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: true})
+		})
+
+		err := c.UnpinAllForumTopicMessages(t.Context(), 100, 7)
+		require.NoError(t, err)
+	})
+
+	t.Run("error response", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: false, Desc: "not enough rights"})
+		})
+
+		err := c.UnpinAllForumTopicMessages(t.Context(), 100, 7)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not enough rights")
 	})
 }
 
@@ -191,7 +374,7 @@ func TestSendPhoto(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: true})
 		})
 
-		err := c.SendPhoto(t.Context(), 100, "https://img.com/1.jpg", "<b>caption</b>")
+		err := c.SendPhoto(t.Context(), 100, 0, "https://img.com/1.jpg", "<b>caption</b>")
 		require.NoError(t, err)
 	})
 
@@ -201,7 +384,7 @@ func TestSendPhoto(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{OK: false, Desc: "photo too large"})
 		})
 
-		err := c.SendPhoto(t.Context(), 100, "https://img.com/big.jpg", "cap")
+		err := c.SendPhoto(t.Context(), 100, 0, "https://img.com/big.jpg", "cap")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "photo too large")
 	})

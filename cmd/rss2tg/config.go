@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"os"
 	"strconv"
@@ -9,10 +10,11 @@ import (
 
 // Config holds application configuration loaded from environment variables.
 type Config struct {
-	BotToken string
-	Manager  int64
-	Interval time.Duration
-	DBPath   string
+	BotToken   string
+	Manager    int64
+	Interval   time.Duration
+	DBPath     string
+	YouTubeKey string
 }
 
 // LoadConfig loads configuration from environment variables.
@@ -32,7 +34,7 @@ func LoadConfig() (*Config, error) {
 		return nil, errors.New("RSS2TG_MANAGER must be a valid integer")
 	}
 
-	interval := 5 * time.Minute
+	interval := 10 * time.Minute
 	if v := os.Getenv("RSS2TG_INTERVAL"); v != "" {
 		interval, err = time.ParseDuration(v)
 		if err != nil || interval <= 0 {
@@ -40,15 +42,11 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 
-	dbPath := os.Getenv("RSS2TG_DB_PATH")
-	if dbPath == "" {
-		dbPath = "rss2tg.db"
-	}
-
 	return &Config{
-		BotToken: token,
-		Manager:  manager,
-		Interval: interval,
-		DBPath:   dbPath,
+		BotToken:   token,
+		Manager:    manager,
+		Interval:   interval,
+		DBPath:     cmp.Or(os.Getenv("RSS2TG_DB_PATH"), "rss2tg.db"),
+		YouTubeKey: os.Getenv("RSS2TG_YOUTUBE_KEY"),
 	}, nil
 }

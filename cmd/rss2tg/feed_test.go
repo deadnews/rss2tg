@@ -6,14 +6,17 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/mmcdole/gofeed"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/deadnews/rss2tg/internal/format"
 	"github.com/deadnews/rss2tg/internal/store"
 	"github.com/deadnews/rss2tg/internal/telegram"
 )
@@ -45,58 +48,88 @@ func readTestdata(t *testing.T, name string) []byte {
 	return data
 }
 
-type testFeedBot struct {
-	bot   *Bot
-	store *store.Store
-	mu    *sync.Mutex
-	sent  *[]sentMessage
-	ts    *httptest.Server
-	mux   *http.ServeMux
+// sentMessage captures a message sent via the Telegram API mock.
+type sentMessage struct {
+	ChatID   int64
+	ThreadID int
+	Text     string
 }
 
-func newTestFeedBot(t *testing.T) *testFeedBot {
+// unpinCall captures an unpinAllForumTopicMessages request.
+type unpinCall struct {
+	ChatID   int64
+	ThreadID int
+}
+
+type testBotEnv struct {
+	bot    *Bot
+	store  *store.Store
+	mu     *sync.Mutex
+	sent   *[]sentMessage
+	topics *[]string
+	unpins *[]unpinCall
+	ts     *httptest.Server
+	mux    *http.ServeMux
+}
+
+// newTestBotEnv wires a Bot with a mock Telegram server that captures POSTed messages.
+// Tests register feed routes on env.mux as needed.
+func newTestBotEnv(t *testing.T) *testBotEnv {
 	t.Helper()
 
 	var mu sync.Mutex
 	var sent []sentMessage
-
-	hnXML := readTestdata(t, "hn.xml")
-	redditAtom := readTestdata(t, "reddit.atom")
-	youtubeAtom := readTestdata(t, "youtube.atom")
+	var topics []string
+	var unpins []unpinCall
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/feed.xml", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/xml")
-		_, _ = w.Write([]byte(testRSS))
+	// createForumTopic returns a synthetic thread ID and records the topic name.
+	mux.HandleFunc("/bottest-token/createForumTopic", func(w http.ResponseWriter, r *http.Request) {
+		var raw struct {
+			Name string `json:"name"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&raw)
+		mu.Lock()
+		topics = append(topics, raw.Name)
+		id := 1000 + len(topics)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":     true,
+			"result": map[string]any{"message_thread_id": id, "name": raw.Name},
+		})
 	})
-	mux.HandleFunc("/hn.xml", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/xml")
-		_, _ = w.Write(hnXML)
-	})
-	mux.HandleFunc("/reddit.atom", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/atom+xml")
-		_, _ = w.Write(redditAtom)
-	})
-	mux.HandleFunc("/youtube.atom", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/atom+xml")
-		_, _ = w.Write(youtubeAtom)
+	mux.HandleFunc("/bottest-token/unpinAllForumTopicMessages", func(w http.ResponseWriter, r *http.Request) {
+		var raw struct {
+			ChatID          int64 `json:"chat_id"`
+			MessageThreadID int   `json:"message_thread_id"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&raw)
+		mu.Lock()
+		unpins = append(unpins, unpinCall{ChatID: raw.ChatID, ThreadID: raw.MessageThreadID})
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			var raw struct {
-				ChatID  int64  `json:"chat_id"`
-				Text    string `json:"text"`
-				Caption string `json:"caption"`
-			}
-			_ = json.NewDecoder(r.Body).Decode(&raw)
-			text := raw.Text
-			if text == "" {
-				text = raw.Caption
-			}
-			mu.Lock()
-			sent = append(sent, sentMessage{ChatID: raw.ChatID, Text: text})
-			mu.Unlock()
+		if r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
 		}
+		var raw struct {
+			ChatID          int64  `json:"chat_id"`
+			MessageThreadID int    `json:"message_thread_id"`
+			Text            string `json:"text"`
+			Caption         string `json:"caption"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&raw)
+		text := raw.Text
+		if text == "" {
+			text = raw.Caption
+		}
+		mu.Lock()
+		sent = append(sent, sentMessage{ChatID: raw.ChatID, ThreadID: raw.MessageThreadID, Text: text})
+		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
@@ -111,32 +144,89 @@ func newTestFeedBot(t *testing.T) *testFeedBot {
 	tg := telegram.NewClient("test-token")
 	tg.BaseURL = ts.URL
 
-	bot := &Bot{
-		cfg:    &Config{Manager: 42},
-		tg:     tg,
-		store:  st,
-		parser: gofeed.NewParser(),
-	}
+	bot := NewBot(&Config{Manager: 42}, tg, st)
 
-	return &testFeedBot{bot: bot, store: st, mu: &mu, sent: &sent, ts: ts, mux: mux}
+	return &testBotEnv{bot: bot, store: st, mu: &mu, sent: &sent, topics: &topics, unpins: &unpins, ts: ts, mux: mux}
 }
 
-func (tb *testFeedBot) getSent() []sentMessage {
+// serveXML registers a static XML handler on the env's mux.
+func (tb *testBotEnv) serveXML(path string, body []byte) {
+	tb.mux.HandleFunc(path, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = w.Write(body)
+	})
+}
+
+// serveChatMember makes getChatMember report the given member status.
+func (tb *testBotEnv) serveChatMember(status string) {
+	tb.mux.HandleFunc("/bottest-token/getChatMember", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":     true,
+			"result": map[string]any{"status": status},
+		})
+	})
+}
+
+// serveChat makes getChat report the given title for each chat ID.
+func (tb *testBotEnv) serveChat(titles map[int64]string) {
+	tb.mux.HandleFunc("/bottest-token/getChat", func(w http.ResponseWriter, r *http.Request) {
+		id, _ := strconv.ParseInt(r.URL.Query().Get("chat_id"), 10, 64)
+		result := map[string]any{"id": id, "type": "supergroup"}
+		if title, ok := titles[id]; ok {
+			result["title"] = title
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "result": result})
+	})
+}
+
+// failChatMember makes getChatMember return an error response.
+func (tb *testBotEnv) failChatMember() {
+	tb.mux.HandleFunc("/bottest-token/getChatMember", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "description": "chat not found"})
+	})
+}
+
+func (tb *testBotEnv) getSent() []sentMessage {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	return append([]sentMessage(nil), *tb.sent...)
 }
 
-func (tb *testFeedBot) resetSent() {
+func (tb *testBotEnv) resetSent() {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	*tb.sent = nil
 }
 
+func (tb *testBotEnv) getTopics() []string {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	return append([]string(nil), *tb.topics...)
+}
+
+func (tb *testBotEnv) getUnpins() []unpinCall {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	return append([]unpinCall(nil), *tb.unpins...)
+}
+
+func newTestFeedBot(t *testing.T) *testBotEnv {
+	t.Helper()
+	env := newTestBotEnv(t)
+	env.serveXML("/feed.xml", []byte(testRSS))
+	env.serveXML("/hn.xml", readTestdata(t, "hn.xml"))
+	env.serveXML("/reddit.atom", readTestdata(t, "reddit.atom"))
+	env.serveXML("/youtube.atom", readTestdata(t, "youtube.atom"))
+	return env
+}
+
 func TestCheckFeeds(t *testing.T) {
 	tb := newTestFeedBot(t)
 
-	err := tb.store.AddSub(100, store.Sub{URL: tb.ts.URL + "/feed.xml", Format: "link"})
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: tb.ts.URL + "/feed.xml", Format: "link"})
 	require.NoError(t, err)
 
 	tb.bot.checkFeeds(t.Context())
@@ -151,7 +241,7 @@ func TestCheckFeeds(t *testing.T) {
 func TestCheckFeedsPreviewFormat(t *testing.T) {
 	tb := newTestFeedBot(t)
 
-	err := tb.store.AddSub(100, store.Sub{URL: tb.ts.URL + "/feed.xml", Format: "pw"})
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: tb.ts.URL + "/feed.xml", Format: "pw"})
 	require.NoError(t, err)
 
 	tb.bot.checkFeeds(t.Context())
@@ -174,15 +264,13 @@ func TestSubscribeFeedSendsOnlyLatest(t *testing.T) {
 </channel></rss>`
 
 	tb := newTestFeedBot(t)
-	tb.mux.HandleFunc("/seed.xml", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/xml")
-		_, _ = w.Write([]byte(rss))
-	})
+	tb.serveXML("/seed.xml", []byte(rss))
 
 	feedURL := tb.ts.URL + "/seed.xml"
-	feed, err := tb.bot.parser.ParseURLWithContext(feedURL, t.Context())
+	feed, err := tb.bot.parseFeed(t.Context(), feedURL)
 	require.NoError(t, err)
-	tb.bot.deliverInitialEntries(t.Context(), feedURL, feed, []store.ChatFeed{{ChatID: 100, Format: "link"}})
+	chat := store.ChatFeed{ChatID: 100, Sub: store.Sub{Format: "link"}}
+	tb.bot.deliverInitialEntries(t.Context(), feedURL, feed, &chat, []store.ChatFeed{chat})
 
 	assert.Len(t, tb.getSent(), initialSendLimit)
 
@@ -190,6 +278,81 @@ func TestSubscribeFeedSendsOnlyLatest(t *testing.T) {
 		seen, err := tb.store.IsSeen(feedURL, guid)
 		require.NoError(t, err)
 		assert.True(t, seen, "guid %s should be seen after subscribe", guid)
+	}
+}
+
+func TestSubscribeInitialSendSkipsFilteredEntries(t *testing.T) {
+	const rss = `<?xml version="1.0"?>
+<rss version="2.0"><channel><title>T</title>
+<item><title>Skip One</title><link>https://e.com/1</link><guid>1</guid></item>
+<item><title>Skip Two</title><link>https://e.com/2</link><guid>2</guid></item>
+<item><title>Keep Three</title><link>https://e.com/3</link><guid>3</guid></item>
+<item><title>Keep Four</title><link>https://e.com/4</link><guid>4</guid></item>
+<item><title>Keep Five</title><link>https://e.com/5</link><guid>5</guid></item>
+</channel></rss>`
+
+	tb := newTestFeedBot(t)
+	tb.serveXML("/seed.xml", []byte(rss))
+
+	feedURL := tb.ts.URL + "/seed.xml"
+	feed, err := tb.bot.parseFeed(t.Context(), feedURL)
+	require.NoError(t, err)
+	chat := store.ChatFeed{ChatID: 100, Sub: store.Sub{Format: "link", Exclude: []string{"skip"}}}
+	tb.bot.deliverInitialEntries(t.Context(), feedURL, feed, &chat, []store.ChatFeed{chat})
+
+	sent := tb.getSent()
+	require.Len(t, sent, initialSendLimit)
+	assert.Contains(t, sent[0].Text, "https://e.com/5")
+	assert.Contains(t, sent[1].Text, "https://e.com/4")
+	assert.Contains(t, sent[2].Text, "https://e.com/3")
+
+	for _, guid := range []string{"1", "2", "3", "4", "5"} {
+		seen, err := tb.store.IsSeen(feedURL, guid)
+		require.NoError(t, err)
+		assert.True(t, seen, "guid %s should be seen after subscribe", guid)
+	}
+}
+
+func TestCheckFeedsDropsRejectedEntry(t *testing.T) {
+	// A message Telegram permanently rejects must be marked seen, not retried forever.
+	tb := newTestFeedBot(t)
+	tb.mux.HandleFunc("/bottest-token/sendMessage", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": false, "description": "Bad Request: can't parse entities",
+		})
+	})
+
+	feedURL := tb.ts.URL + "/feed.xml"
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: feedURL, Format: "link"})
+	require.NoError(t, err)
+
+	tb.bot.checkFeeds(t.Context())
+
+	for _, guid := range []string{"guid-1", "guid-2"} {
+		seen, err := tb.store.IsSeen(feedURL, guid)
+		require.NoError(t, err)
+		assert.True(t, seen, "rejected guid %s should be marked seen", guid)
+	}
+}
+
+func TestCheckFeedsRetriesTransientFailure(t *testing.T) {
+	// A transient send failure must leave entries unseen so the next cycle retries.
+	tb := newTestFeedBot(t)
+	tb.mux.HandleFunc("/bottest-token/sendMessage", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError) // no JSON body → decode error → transient
+	})
+
+	feedURL := tb.ts.URL + "/feed.xml"
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: feedURL, Format: "link"})
+	require.NoError(t, err)
+
+	tb.bot.checkFeeds(t.Context())
+
+	for _, guid := range []string{"guid-1", "guid-2"} {
+		seen, err := tb.store.IsSeen(feedURL, guid)
+		require.NoError(t, err)
+		assert.False(t, seen, "transient-failed guid %s must not be marked seen", guid)
 	}
 }
 
@@ -213,7 +376,7 @@ func TestItemGUID(t *testing.T) {
 func TestCheckFeedsTextFormat(t *testing.T) {
 	tb := newTestFeedBot(t)
 
-	err := tb.store.AddSub(100, store.Sub{URL: tb.ts.URL + "/hn.xml", Format: "text"})
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: tb.ts.URL + "/hn.xml", Format: "text"})
 	require.NoError(t, err)
 
 	tb.bot.checkFeeds(t.Context())
@@ -234,11 +397,38 @@ func TestCheckFeedsTextFormat(t *testing.T) {
 	assert.Contains(t, text, "\n")
 }
 
+func TestCheckFeedsTruncatesLongEntry(t *testing.T) {
+	rss := `<?xml version="1.0"?>
+<rss version="2.0"><channel><title>T</title>
+<item><title>Long</title><link>https://e.com/1</link><guid>long-1</guid>
+<description>` + strings.Repeat("word ", 2000) + `</description></item>
+</channel></rss>`
+
+	tb := newTestFeedBot(t)
+	tb.serveXML("/long.xml", []byte(rss))
+	feedURL := tb.ts.URL + "/long.xml"
+
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: feedURL, Format: "text"})
+	require.NoError(t, err)
+
+	tb.bot.checkFeeds(t.Context())
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	// Within the limit: re-truncating is a no-op.
+	assert.Equal(t, sent[0].Text, format.TruncateHTML(sent[0].Text, format.MessageLimit))
+	assert.Contains(t, sent[0].Text, "…")
+
+	seen, err := tb.store.IsSeen(feedURL, "long-1")
+	require.NoError(t, err)
+	assert.True(t, seen, "truncated entry should be delivered and marked seen")
+}
+
 func TestCheckFeedsYouTubeFiltersShorts(t *testing.T) {
 	tb := newTestFeedBot(t)
 
 	feedURL := tb.ts.URL + "/youtube.atom"
-	err := tb.store.AddSub(100, store.Sub{URL: feedURL, Format: "link"})
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: feedURL, Format: "link"})
 	require.NoError(t, err)
 
 	tb.bot.checkFeeds(t.Context())
@@ -256,7 +446,7 @@ func TestCheckFeedsYouTubeIncludesShortsWhenEnabled(t *testing.T) {
 	tb := newTestFeedBot(t)
 
 	feedURL := tb.ts.URL + "/youtube.atom"
-	err := tb.store.AddSub(100, store.Sub{URL: feedURL, Format: "link", Shorts: true})
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: feedURL, Format: "link", Shorts: true})
 	require.NoError(t, err)
 
 	tb.bot.checkFeeds(t.Context())
@@ -275,11 +465,11 @@ func TestCheckFeedsYouTubeIncludesShortsWhenEnabled(t *testing.T) {
 
 func TestCheckFeedsYouTubeMarksShortsSeen(t *testing.T) {
 	// Even when all chats filter shorts, the GUID must be marked seen,
-	// otherwise we'd re-process the same items every poll cycle.
+	// otherwise the same items get re-processed every poll cycle.
 	tb := newTestFeedBot(t)
 
 	feedURL := tb.ts.URL + "/youtube.atom"
-	err := tb.store.AddSub(100, store.Sub{URL: feedURL, Format: "link"})
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: feedURL, Format: "link"})
 	require.NoError(t, err)
 
 	tb.bot.checkFeeds(t.Context())
@@ -296,10 +486,55 @@ func TestCheckFeedsYouTubeMarksShortsSeen(t *testing.T) {
 	}
 }
 
+func TestCheckFeedsAppliesExcludeFilter(t *testing.T) {
+	tb := newTestFeedBot(t)
+	feedURL := tb.ts.URL + "/feed.xml"
+
+	_, err := tb.store.AddSub(100, 0, &store.Sub{
+		URL:     feedURL,
+		Format:  "link",
+		Exclude: []string{"two"},
+	})
+	require.NoError(t, err)
+
+	tb.bot.checkFeeds(t.Context())
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "https://example.com/1")
+
+	// Filtered item still marked seen — second poll sends nothing.
+	tb.resetSent()
+	tb.bot.checkFeeds(t.Context())
+	assert.Empty(t, tb.getSent())
+
+	seen, err := tb.store.IsSeen(feedURL, "guid-2")
+	require.NoError(t, err)
+	assert.True(t, seen, "filtered guid should be marked seen")
+}
+
+func TestCheckFeedsAppliesIncludeFilter(t *testing.T) {
+	tb := newTestFeedBot(t)
+	feedURL := tb.ts.URL + "/feed.xml"
+
+	_, err := tb.store.AddSub(100, 0, &store.Sub{
+		URL:     feedURL,
+		Format:  "link",
+		Include: []string{"two"},
+	})
+	require.NoError(t, err)
+
+	tb.bot.checkFeeds(t.Context())
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "https://example.com/2")
+}
+
 func TestCheckFeedsPWReddit(t *testing.T) {
 	tb := newTestFeedBot(t)
 
-	err := tb.store.AddSub(100, store.Sub{URL: tb.ts.URL + "/reddit.atom", Format: "pw"})
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: tb.ts.URL + "/reddit.atom", Format: "pw"})
 	require.NoError(t, err)
 
 	tb.bot.checkFeeds(t.Context())
@@ -316,4 +551,34 @@ func TestCheckFeedsPWReddit(t *testing.T) {
 	assert.Contains(t, sent[1].Text, `<a href="https://www.reddit.com/user/Mackelowsky">`)
 	assert.Contains(t, sent[1].Text, "/u/Mackelowsky")
 	assert.Contains(t, sent[1].Text, `<a href="https://i.redd.it/6j31j4o2qrlf1.jpeg">[link]</a>`)
+}
+
+func TestCheckFeedsPWFallsBackToMessageOnPhotoFailure(t *testing.T) {
+	tb := newTestFeedBot(t)
+
+	// sendPhoto always fails → delivery must fall back to sendMessage.
+	var photoAttempts atomic.Int32
+	tb.mux.HandleFunc("/bottest-token/sendPhoto", func(w http.ResponseWriter, _ *http.Request) {
+		photoAttempts.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": false, "description": "Bad Request: wrong file identifier",
+		})
+	})
+
+	feedURL := tb.ts.URL + "/reddit.atom"
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: feedURL, Format: "pw"})
+	require.NoError(t, err)
+
+	tb.bot.checkFeeds(t.Context())
+
+	assert.Positive(t, photoAttempts.Load(), "sendPhoto should be attempted")
+	sent := tb.getSent()
+	require.Len(t, sent, 2, "both entries delivered via the sendMessage fallback")
+	assert.Contains(t, sent[0].Text, "Map of light pollution")
+
+	// Delivered → marked seen; second poll sends nothing.
+	tb.resetSent()
+	tb.bot.checkFeeds(t.Context())
+	assert.Empty(t, tb.getSent())
 }

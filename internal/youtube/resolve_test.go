@@ -9,19 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIsShort(t *testing.T) {
-	tests := map[string]bool{
-		"https://www.youtube.com/shorts/abc123":    true,
-		"https://www.youtube.com/watch?v=abc123":   false,
-		"https://example.com/shorts/abc":           false,
-		"https://www.youtube.com/feeds/videos.xml": false,
-		"": false,
-	}
-	for url, want := range tests {
-		assert.Equal(t, want, IsShort(url), url)
-	}
-}
-
 func TestResolveURL(t *testing.T) {
 	t.Run("non-YouTube URL passes through", func(t *testing.T) {
 		got, err := ResolveURL(t.Context(), "https://example.com/feed.xml")
@@ -93,8 +80,6 @@ func TestFetchChannelPage(t *testing.T) {
 }
 
 func TestResolveURLHandleNotFound(t *testing.T) {
-	// /@handle/ path on a non-YouTube host falls through the YouTube-host
-	// gate before reaching the network — covers the early-return branch.
 	got, err := ResolveURL(t.Context(), "https://example.com/@somehandle")
 	require.NoError(t, err)
 	assert.Equal(t, "https://example.com/@somehandle", got)
@@ -108,7 +93,6 @@ func TestResolveURLChannelTrailingPath(t *testing.T) {
 }
 
 func TestResolveURLChannelNonUC(t *testing.T) {
-	// /channel/ with non-UC id should fall through to handle check and return raw.
 	in := "https://www.youtube.com/channel/notUCprefixed"
 	got, err := ResolveURL(t.Context(), in)
 	require.NoError(t, err)

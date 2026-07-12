@@ -3,6 +3,7 @@ package format
 import (
 	"html"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -50,7 +51,7 @@ var (
 	reAnchorPad = regexp.MustCompile(`(<a [^>]*>)\s+|\s+(</a>)`)
 )
 
-// Telegram HTML-mode inline tags we keep. Everything else is stripped.
+// Telegram HTML-mode inline tags to keep. Everything else is stripped.
 var allowedTags = map[string]bool{
 	"a":          true,
 	"b":          true,
@@ -78,33 +79,71 @@ func sanitizeHTML(s string) string {
 	s = blockTagReplacer.Replace(s)
 	s = reBr.ReplaceAllString(s, "\n")
 
-	s = reHTMLTag.ReplaceAllStringFunc(s, func(match string) string {
-		m := reHTMLTag.FindStringSubmatch(match)
-		closing := m[1] == "/"
-		name := strings.ToLower(m[2])
-
-		if !allowedTags[name] {
-			return ""
-		}
-		if closing {
-			return "</" + name + ">"
-		}
-		if name == "a" {
-			if href := extractHref(m[3]); href != "" {
-				return `<a href="` + href + `">`
-			}
-			return ""
-		}
-		return "<" + name + ">"
-	})
-
-	s = reEmptyAnchor.ReplaceAllString(s, "")
 	s = reSpaceEntity.ReplaceAllString(s, " ")
+	s = keepAllowedTags(s)
+	s = reEmptyAnchor.ReplaceAllString(s, "")
 	s = reAnchorPad.ReplaceAllString(s, "$1$2")
 	return s
 }
 
-// extractHref parses an href attribute and returns it re-escaped for HTML output.
+// keepAllowedTags keeps only Telegram-supported tags and escapes all other text.
+func keepAllowedTags(s string) string {
+	var b strings.Builder
+	last := 0
+	droppedAnchors := 0
+	var open []string
+	closeTags := func(downTo int) {
+		for _, name := range slices.Backward(open[downTo:]) {
+			b.WriteString("</")
+			b.WriteString(name)
+			b.WriteByte('>')
+		}
+		open = open[:downTo]
+	}
+	for _, loc := range reHTMLTag.FindAllStringSubmatchIndex(s, -1) {
+		b.WriteString(escapeText(s[last:loc[0]]))
+		last = loc[1]
+		closing := s[loc[2]:loc[3]] == "/"
+		name := strings.ToLower(s[loc[4]:loc[5]])
+		switch {
+		case !allowedTags[name]:
+		case name == "a" && closing && droppedAnchors > 0:
+			droppedAnchors--
+		case closing:
+			i := len(open) - 1
+			for i >= 0 && open[i] != name {
+				i--
+			}
+			if i >= 0 {
+				closeTags(i)
+			}
+		case name == "a":
+			if href := extractHref(s[loc[6]:loc[7]]); href != "" {
+				b.WriteString(`<a href="`)
+				b.WriteString(href)
+				b.WriteString(`">`)
+				open = append(open, name)
+			} else {
+				droppedAnchors++
+			}
+		default:
+			b.WriteByte('<')
+			b.WriteString(name)
+			b.WriteByte('>')
+			open = append(open, name)
+		}
+	}
+	b.WriteString(escapeText(s[last:]))
+	closeTags(0)
+	return b.String()
+}
+
+// escapeText normalizes entities then escapes HTML specials in plain text.
+func escapeText(s string) string {
+	return html.EscapeString(html.UnescapeString(s))
+}
+
+// extractHref returns the href re-escaped for output, or empty if absent or an unsafe scheme.
 func extractHref(attrs string) string {
 	m := reHrefAttr.FindStringSubmatch(attrs)
 	if m == nil {
@@ -114,10 +153,17 @@ func extractHref(attrs string) string {
 	if href == "" {
 		href = m[2]
 	}
-	if href == "" {
+	href = html.UnescapeString(href)
+	if !allowedScheme(href) {
 		return ""
 	}
-	return html.EscapeString(html.UnescapeString(href))
+	return html.EscapeString(href)
+}
+
+// allowedScheme reports whether href is safe to render as a Telegram link.
+func allowedScheme(href string) bool {
+	s := strings.ToLower(strings.TrimSpace(href))
+	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
 }
 
 // numberOL replaces <li> tags inside <ol> blocks with numbered prefixes.
@@ -132,8 +178,9 @@ func numberOL(s string) string {
 	})
 }
 
-// normalizeLines splits text on newlines, collapses whitespace, and drops empty lines.
-func normalizeLines(text string, maxLines int) []string {
+// normalizeText collapses whitespace per line, drops empty lines,
+// and keeps at most maxLines lines (0 = no limit).
+func normalizeText(text string, maxLines int) string {
 	var lines []string
 	for line := range strings.SplitSeq(text, "\n") {
 		line = strings.Join(strings.Fields(line), " ")
@@ -145,5 +192,5 @@ func normalizeLines(text string, maxLines int) []string {
 			break
 		}
 	}
-	return lines
+	return strings.Join(lines, "\n")
 }

@@ -5,14 +5,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 )
 
-// DefaultBaseURL is the production Telegram Bot API endpoint.
-const DefaultBaseURL = "https://api.telegram.org"
+// defaultBaseURL is the production Telegram Bot API endpoint.
+const defaultBaseURL = "https://api.telegram.org"
+
+const longPollTimeout = 30
 
 // Client is a Telegram Bot API client.
 type Client struct {
@@ -25,9 +29,9 @@ type Client struct {
 func NewClient(token string) *Client {
 	return &Client{
 		token:   token,
-		BaseURL: DefaultBaseURL,
+		BaseURL: defaultBaseURL,
 		client: &http.Client{
-			Timeout: 35 * time.Second,
+			Timeout: (longPollTimeout + 5) * time.Second,
 		},
 	}
 }
@@ -35,7 +39,7 @@ func NewClient(token string) *Client {
 // GetMe validates the bot token.
 func (c *Client) GetMe(ctx context.Context) (*User, error) {
 	var resp Response[User]
-	if err := c.get(ctx, "getMe", "", &resp); err != nil {
+	if err := c.get(ctx, "getMe", nil, &resp); err != nil {
 		return nil, err
 	}
 	if !resp.OK {
@@ -46,7 +50,10 @@ func (c *Client) GetMe(ctx context.Context) (*User, error) {
 
 // GetUpdates long-polls for new updates starting from offset.
 func (c *Client) GetUpdates(ctx context.Context, offset int64) ([]Update, error) {
-	query := "?offset=" + strconv.FormatInt(offset, 10) + "&timeout=30"
+	query := url.Values{
+		"offset":  {strconv.FormatInt(offset, 10)},
+		"timeout": {strconv.Itoa(longPollTimeout)},
+	}
 	var resp Response[[]Update]
 	if err := c.get(ctx, "getUpdates", query, &resp); err != nil {
 		return nil, err
@@ -57,12 +64,42 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64) ([]Update, error)
 	return resp.Result, nil
 }
 
+// IsChatAdmin reports whether userID is the owner or an administrator of chatID.
+func (c *Client) IsChatAdmin(ctx context.Context, chatID, userID int64) (bool, error) {
+	query := url.Values{
+		"chat_id": {strconv.FormatInt(chatID, 10)},
+		"user_id": {strconv.FormatInt(userID, 10)},
+	}
+	var resp Response[ChatMember]
+	if err := c.get(ctx, "getChatMember", query, &resp); err != nil {
+		return false, err
+	}
+	if !resp.OK {
+		return false, fmt.Errorf("getChatMember: %s", resp.Desc)
+	}
+	return resp.Result.Status == "creator" || resp.Result.Status == "administrator", nil
+}
+
+// GetChat returns metadata for a chat, such as its title.
+func (c *Client) GetChat(ctx context.Context, chatID int64) (*Chat, error) {
+	query := url.Values{"chat_id": {strconv.FormatInt(chatID, 10)}}
+	var resp Response[Chat]
+	if err := c.get(ctx, "getChat", query, &resp); err != nil {
+		return nil, err
+	}
+	if !resp.OK {
+		return nil, fmt.Errorf("getChat: %s", resp.Desc)
+	}
+	return &resp.Result, nil
+}
+
 // SendMessage sends an HTML message to a chat, retrying once on rate limit.
-func (c *Client) SendMessage(ctx context.Context, chatID int64, text string, disablePreview bool) error {
+func (c *Client) SendMessage(ctx context.Context, chatID int64, threadID int, text string, disablePreview bool) error {
 	payload := sendMessageRequest{
-		ChatID:    chatID,
-		Text:      text,
-		ParseMode: "HTML",
+		ChatID:          chatID,
+		MessageThreadID: threadID,
+		Text:            text,
+		ParseMode:       "HTML",
 	}
 	if disablePreview {
 		payload.LinkPreviewOptions = &linkPreviewOptions{IsDisabled: true}
@@ -71,17 +108,70 @@ func (c *Client) SendMessage(ctx context.Context, chatID int64, text string, dis
 }
 
 // SendPhoto sends a photo by URL with an HTML caption.
-func (c *Client) SendPhoto(ctx context.Context, chatID int64, photoURL, caption string) error {
+func (c *Client) SendPhoto(ctx context.Context, chatID int64, threadID int, photoURL, caption string) error {
 	payload := sendPhotoRequest{
-		ChatID:    chatID,
-		Photo:     photoURL,
-		Caption:   caption,
-		ParseMode: "HTML",
+		ChatID:          chatID,
+		MessageThreadID: threadID,
+		Photo:           photoURL,
+		Caption:         caption,
+		ParseMode:       "HTML",
 	}
 	return c.postWithRetry(ctx, "sendPhoto", payload)
 }
 
-// postWithRetry POSTs payload, retrying once on 429.
+// maxForumTopicName is Telegram's forum topic name length limit.
+const maxForumTopicName = 128
+
+// CreateForumTopic creates a forum topic and returns its message thread ID.
+func (c *Client) CreateForumTopic(ctx context.Context, chatID int64, name string) (int, error) {
+	if r := []rune(name); len(r) > maxForumTopicName {
+		name = string(r[:maxForumTopicName])
+	}
+	body, err := json.Marshal(createForumTopicRequest{ChatID: chatID, Name: name})
+	if err != nil {
+		return 0, fmt.Errorf("createForumTopic marshal: %w", err)
+	}
+	result, err := c.post(ctx, "createForumTopic", body)
+	if err != nil {
+		return 0, err
+	}
+	if !result.OK {
+		return 0, fmt.Errorf("createForumTopic: %s", result.Desc)
+	}
+	var topic ForumTopic
+	if err := json.Unmarshal(result.Result, &topic); err != nil {
+		return 0, fmt.Errorf("createForumTopic decode: %w", err)
+	}
+	return topic.MessageThreadID, nil
+}
+
+// UnpinAllForumTopicMessages clears a topic's pinned messages.
+func (c *Client) UnpinAllForumTopicMessages(ctx context.Context, chatID int64, threadID int) error {
+	return c.postWithRetry(ctx, "unpinAllForumTopicMessages", unpinAllForumTopicMessagesRequest{
+		ChatID:          chatID,
+		MessageThreadID: threadID,
+	})
+}
+
+// APIError is a permanent Telegram rejection.
+type APIError struct {
+	Method string
+	Desc   string
+}
+
+func (e *APIError) Error() string {
+	return e.Method + ": " + e.Desc
+}
+
+// retryAfter returns the rate-limit backoff Telegram requested, or 0.
+func (r *Response[T]) retryAfter() time.Duration {
+	if r.Parameters == nil || r.Parameters.RetryAfter <= 0 {
+		return 0
+	}
+	return time.Duration(r.Parameters.RetryAfter) * time.Second
+}
+
+// postWithRetry POSTs payload, retrying once on 429; a permanent rejection returns *APIError.
 func (c *Client) postWithRetry(ctx context.Context, method string, payload any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -96,25 +186,29 @@ func (c *Client) postWithRetry(ctx context.Context, method string, payload any) 
 		return nil
 	}
 
-	if result.Parameters != nil && result.Parameters.RetryAfter > 0 {
-		timer := time.NewTimer(time.Duration(result.Parameters.RetryAfter) * time.Second)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return fmt.Errorf("%s: %w", method, ctx.Err())
-		case <-timer.C:
-		}
-
-		result, err = c.post(ctx, method, body)
-		if err != nil {
-			return err
-		}
-		if result.OK {
-			return nil
-		}
+	wait := result.retryAfter()
+	if wait == 0 {
+		return &APIError{Method: method, Desc: result.Desc}
 	}
 
-	return fmt.Errorf("%s: %s", method, result.Desc)
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("%s: %w", method, ctx.Err())
+	case <-time.After(wait):
+	}
+
+	result, err = c.post(ctx, method, body)
+	if err != nil {
+		return err
+	}
+	if result.OK {
+		return nil
+	}
+	// Still rate-limited: transient, retry next cycle rather than dropping.
+	if result.retryAfter() > 0 {
+		return fmt.Errorf("%s: %s", method, result.Desc)
+	}
+	return &APIError{Method: method, Desc: result.Desc}
 }
 
 func (c *Client) post(ctx context.Context, method string, body []byte) (*Response[json.RawMessage], error) {
@@ -124,7 +218,7 @@ func (c *Client) post(ctx context.Context, method string, body []byte) (*Respons
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.client.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", method, err)
 	}
@@ -132,27 +226,43 @@ func (c *Client) post(ctx context.Context, method string, body []byte) (*Respons
 
 	var result Response[json.RawMessage]
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("%s decode: %w", method, err)
+		return nil, fmt.Errorf("%s decode (status %d): %w", method, resp.StatusCode, err)
 	}
 	return &result, nil
 }
 
-func (c *Client) get(ctx context.Context, method, query string, dest any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url(method)+query, http.NoBody)
+func (c *Client) get(ctx context.Context, method string, query url.Values, dest any) error {
+	endpoint := c.url(method)
+	if len(query) > 0 {
+		endpoint += "?" + query.Encode()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("%s: %w", method, err)
 	}
 
-	resp, err := c.client.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return fmt.Errorf("%s: %w", method, err)
 	}
 	defer resp.Body.Close()
 
 	if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
-		return fmt.Errorf("%s: %w", method, err)
+		return fmt.Errorf("%s decode (status %d): %w", method, resp.StatusCode, err)
 	}
 	return nil
+}
+
+// do sends the request, stripping the token-bearing URL from transport errors.
+func (c *Client) do(req *http.Request) (*http.Response, error) {
+	resp, err := c.client.Do(req)
+	if err == nil {
+		return resp, nil
+	}
+	if ue, ok := errors.AsType[*url.Error](err); ok {
+		return nil, fmt.Errorf("%s: %w", ue.Op, ue.Err)
+	}
+	return nil, fmt.Errorf("request: %w", err)
 }
 
 func (c *Client) url(method string) string {
