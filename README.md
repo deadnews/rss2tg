@@ -42,9 +42,9 @@ See [`compose.dev.yml`](compose.dev.yml) for a Compose reference.
 | `/help`                                                                         | Show available commands        |
 
 ```text
-/sub https://example.com/feed.xml pw exclude:crypto,ai
-/sub https://reddit.com/r/programming/.rss link include:go,rust
-/sub https://github.com/deadnews/rss2tg
+/sub https://github.com/moby/moby exclude:alpha,beta,rc
+/sub https://reddit.com/r/programming/.rss include:go,rust
+/sub https://example.com/feed.xml pw
 ```
 
 - New subscribers receive the 3 latest entries accepted by their filters;
@@ -52,7 +52,8 @@ See [`compose.dev.yml`](compose.dev.yml) for a Compose reference.
 - `/list` prints each sub as the exact `/sub` line to copy, edit, and resend.
 - In a private chat with the bot, `/list` shows every chat's subscriptions.
 - Re-running `/sub` for an already-subscribed URL replaces its options.
-- Title filters match whole words case-insensitively; exclude wins over include.
+- Title filters match anywhere in the title, case-insensitively; exclude wins
+  over include.
 
 ## Feeds
 

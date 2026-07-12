@@ -6,22 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestTokenize(t *testing.T) {
-	tests := map[string]map[string]struct{}{
-		"":                {},
-		"Hello":           {"hello": {}},
-		"Go 2.0 RELEASE":  {"go": {}, "2": {}, "0": {}, "release": {}},
-		"AI, ML, and DL!": {"ai": {}, "ml": {}, "and": {}, "dl": {}},
-		"foo-bar_baz":     {"foo": {}, "bar": {}, "baz": {}},
-		"привет мир":      {"привет": {}, "мир": {}},
-	}
-	for in, want := range tests {
-		t.Run(in, func(t *testing.T) {
-			assert.Equal(t, want, tokenize(in))
-		})
-	}
-}
-
 func TestAllow(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -32,10 +16,11 @@ func TestAllow(t *testing.T) {
 		{"empty filters allow", "Go 1.26 release", nil, nil, true},
 		{"exclude blocks match", "AI is overhyped", nil, []string{"ai"}, false},
 		{"exclude case-insensitive", "AI news", nil, []string{"ai"}, false},
-		{"exclude requires whole word", "Email tips", nil, []string{"ai"}, true},
+		{"exclude matches inside words", "Email tips", nil, []string{"ai"}, false},
+		{"exclude matches version suffix", "v3.0.0-beta1", nil, []string{"beta"}, false},
 		{"include allows match", "Go 1.26", []string{"go"}, nil, true},
 		{"include rejects non-match", "Rust 2.0", []string{"go"}, nil, false},
-		{"include requires whole word", "Going places", []string{"go"}, nil, false},
+		{"include matches inside words", "Going places", []string{"go"}, nil, true},
 		{"exclude wins over include", "Go AI framework", []string{"go"}, []string{"ai"}, false},
 		{"include OR semantics", "Rust release", []string{"go", "rust"}, nil, true},
 		{"exclude OR semantics", "Go AI", nil, []string{"crypto", "ai"}, false},
@@ -48,7 +33,7 @@ func TestAllow(t *testing.T) {
 }
 
 func TestParseFilterArg(t *testing.T) {
-	t.Run("single word", func(t *testing.T) {
+	t.Run("single term", func(t *testing.T) {
 		got, ok := parseFilterArg("crypto")
 		assert.True(t, ok)
 		assert.Equal(t, []string{"crypto"}, got)
@@ -66,9 +51,10 @@ func TestParseFilterArg(t *testing.T) {
 		assert.Equal(t, []string{"ai"}, got)
 	})
 
-	t.Run("rejects multi-token word", func(t *testing.T) {
-		_, ok := parseFilterArg("c++,go")
-		assert.False(t, ok)
+	t.Run("accepts punctuation", func(t *testing.T) {
+		got, ok := parseFilterArg("c++,go")
+		assert.True(t, ok)
+		assert.Equal(t, []string{"c++", "go"}, got)
 	})
 
 	t.Run("rejects empty input", func(t *testing.T) {

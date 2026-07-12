@@ -17,32 +17,33 @@ import (
 const (
 	pollRetryDelay   = 5 * time.Second
 	feedFetchTimeout = 40 * time.Second
+	feedMaxBytes     = 10 << 20 // 10 MiB
 )
 
 // Bot orchestrates feed checks and Telegram updates.
 type Bot struct {
-	cfg        *Config
-	tg         *telegram.Client
-	store      *store.Store
-	feedClient *http.Client
+	cfg    *Config
+	tg     *telegram.Client
+	store  *store.Store
+	parser *gofeed.Parser // shared across goroutines; configure only in NewBot
 }
 
 // NewBot creates a new Bot instance.
 func NewBot(cfg *Config, tg *telegram.Client, st *store.Store) *Bot {
+	parser := gofeed.NewParser()
+	parser.Client = &http.Client{Timeout: feedFetchTimeout}
+	parser.MaxByteSize = feedMaxBytes
 	return &Bot{
-		cfg:        cfg,
-		tg:         tg,
-		store:      st,
-		feedClient: &http.Client{Timeout: feedFetchTimeout},
+		cfg:    cfg,
+		tg:     tg,
+		store:  st,
+		parser: parser,
 	}
 }
 
-// parseFeed fetches and parses a feed. Fresh parser per call:
-// gofeed.Parser is not safe for concurrent use.
+// parseFeed fetches and parses a feed.
 func (bot *Bot) parseFeed(ctx context.Context, url string) (*gofeed.Feed, error) {
-	parser := gofeed.NewParser()
-	parser.Client = bot.feedClient
-	feed, err := parser.ParseURLWithContext(url, ctx)
+	feed, err := bot.parser.ParseURLWithContext(url, ctx)
 	if err != nil {
 		return nil, fmt.Errorf("parse feed: %w", err)
 	}

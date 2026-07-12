@@ -46,7 +46,7 @@ const helpText = `<b>Available commands:</b>
 • Live streams are included by default — add <code>nolive</code> to filter them out.
 
 <b>Filters</b>
-• Match whole words in the title, case-insensitively; exclude wins over include.
+• Match anywhere in the title, case-insensitively; exclude wins over include.
 
 <b>Topics</b>
 • <code>/sub</code> from General creates a topic per feed; inside a topic subscribes there.

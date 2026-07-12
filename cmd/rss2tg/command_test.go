@@ -738,8 +738,8 @@ func TestParseSubArgs(t *testing.T) {
 			ok: true,
 		},
 		{
-			name: "invalid filter rejected",
-			args: []string{"exclude:c++"},
+			name: "empty filter rejected",
+			args: []string{"exclude:,"},
 			ok:   false,
 		},
 		{
