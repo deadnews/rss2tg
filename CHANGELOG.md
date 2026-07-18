@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.1-alpha.0](https://github.com/deadnews/rss2tg/compare/v0.1.0...v0.1.1-alpha.0) - 2026-07-18
+
+### Bug fixes
+
+- _(format)_ separate feed paragraphs with blank lines - ([e277c47](https://github.com/deadnews/rss2tg/commit/e277c47c909d7ec4eab059b16b0932072879c2a6))
+
+### Chores
+
+- _(prek)_ migrate to toml - ([cc98653](https://github.com/deadnews/rss2tg/commit/cc9865348ee911d7f674aefecd24a652ecf51447))
+
 ## [0.1.0](https://github.com/deadnews/rss2tg/commits/v0.1.0) - 2026-07-12
 
 ### Features
