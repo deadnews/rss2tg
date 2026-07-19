@@ -24,20 +24,19 @@ var (
 	// Any HTML tag: opening, closing, or self-closing.
 	reHTMLTag = regexp.MustCompile(`<\s*(/?)\s*([a-zA-Z][a-zA-Z0-9-]*)([^>]*)>`)
 
-	// <ol>…</ol> blocks and their <li> tags for numbered-list rendering.
+	// Ordered-list numbering: <ol> block and its <li> boundaries.
 	reOLBlock = regexp.MustCompile(`(?is)<ol[^>]*>(.*?)</ol>`)
-	reLi      = regexp.MustCompile(`<li[^>]*>`)
+	reLiOpen  = regexp.MustCompile(`\s*<li[^>]*>\s*`)
+	reLiClose = regexp.MustCompile(`\s*</li\s*>\s*`)
 
 	reBr = regexp.MustCompile(`<br\s*/?\s*>`)
 
-	// Block-level closing tags that map to a newline.
-	blockTagReplacer = strings.NewReplacer(
-		"</li>", "\n",
-		"</p>", "\n",
-		"</div>", "\n",
-		"</tr>", "\n",
-		"</td>", "\n",
-	)
+	// Block tags (open or close) become paragraph breaks; opening tags too,
+	// since feeds often leave blocks unclosed. blockquote/pre kept for Telegram.
+	reBlockTag = regexp.MustCompile(`(?i)</?(?:p|div|section|article|header|footer|aside|nav|main|figure|figcaption|ul|ol|li|dl|dt|dd|table|thead|tbody|tfoot|tr|td|th|caption|center|address|hr|h[1-6])\b[^>]*>`)
+
+	// Runs of blank lines, collapsed to a single paragraph break.
+	reNewlineRuns = regexp.MustCompile(`\n{2,}`)
 
 	reEmptyAnchor = regexp.MustCompile(`<a [^>]*>\s*</a>`)
 
@@ -69,21 +68,24 @@ var allowedTags = map[string]bool{
 	"tg-spoiler": true,
 }
 
-// sanitizeHTML converts block tags to newlines and keeps only Telegram-supported inline tags.
+// sanitizeHTML maps block tags to paragraph breaks, keeping allowed inline tags.
 func sanitizeHTML(s string) string {
 	for _, re := range reDropContent {
 		s = re.ReplaceAllString(s, "")
 	}
 	s = reHTMLCommentDecl.ReplaceAllString(s, "")
 	s = numberOL(s)
-	s = blockTagReplacer.Replace(s)
+	s = reBlockTag.ReplaceAllString(s, "\n\n")
 	s = reBr.ReplaceAllString(s, "\n")
 
 	s = reSpaceEntity.ReplaceAllString(s, " ")
 	s = keepAllowedTags(s)
 	s = reEmptyAnchor.ReplaceAllString(s, "")
 	s = reAnchorPad.ReplaceAllString(s, "$1$2")
-	return s
+
+	// Removed tags leave stray blank-line runs; collapse and trim them.
+	s = reNewlineRuns.ReplaceAllString(s, "\n\n")
+	return strings.Trim(s, "\n")
 }
 
 // keepAllowedTags keeps only Telegram-supported tags and escapes all other text.
@@ -166,31 +168,40 @@ func allowedScheme(href string) bool {
 	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
 }
 
-// numberOL replaces <li> tags inside <ol> blocks with numbered prefixes.
+// numberOL renders <ol> items as compact single-newline "N." lines.
 func numberOL(s string) string {
 	return reOLBlock.ReplaceAllStringFunc(s, func(match string) string {
-		body := reOLBlock.FindStringSubmatch(match)[1]
+		body := reLiClose.ReplaceAllString(reOLBlock.FindStringSubmatch(match)[1], "")
 		counter := 0
-		return reLi.ReplaceAllStringFunc(body, func(string) string {
+		return reLiOpen.ReplaceAllStringFunc(body, func(string) string {
 			counter++
-			return strconv.Itoa(counter) + ". "
+			return "\n" + strconv.Itoa(counter) + ". "
 		})
 	})
 }
 
-// normalizeText collapses whitespace per line, drops empty lines,
-// and keeps at most maxLines lines (0 = no limit).
+// normalizeText collapses whitespace per line, reduces blank-line runs to a
+// single paragraph break, and keeps at most maxLines non-blank lines (0 = no limit).
 func normalizeText(text string, maxLines int) string {
 	var lines []string
+	content := 0
 	for line := range strings.SplitSeq(text, "\n") {
 		line = strings.Join(strings.Fields(line), " ")
 		if line == "" {
+			// Collapse consecutive blanks; skip leading blanks.
+			if len(lines) > 0 && lines[len(lines)-1] != "" {
+				lines = append(lines, "")
+			}
 			continue
 		}
 		lines = append(lines, line)
-		if maxLines > 0 && len(lines) >= maxLines {
+		content++
+		if maxLines > 0 && content >= maxLines {
 			break
 		}
+	}
+	if n := len(lines); n > 0 && lines[n-1] == "" {
+		lines = lines[:n-1]
 	}
 	return strings.Join(lines, "\n")
 }
