@@ -73,14 +73,52 @@ func New(path string) (*Store, error) {
 		if _, err := tx.CreateBucketIfNotExists(bucketSeen); err != nil {
 			return fmt.Errorf("create seen bucket: %w", err)
 		}
-		return nil
+		return migrateChatKeys(tx)
 	})
 	if err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("init buckets: %w", err)
+		return nil, fmt.Errorf("init schema: %w", err)
 	}
 
 	return &Store{db: db}, nil
+}
+
+// migrateChatKeys rewrites pre-topic 8-byte chat keys to the 16-byte
+// chatID+threadID form; removable once existing databases have been opened.
+func migrateChatKeys(tx *bolt.Tx) error {
+	subs := tx.Bucket(bucketSubs)
+	var legacy [][]byte
+	err := subs.ForEach(func(k, _ []byte) error {
+		if len(k) == 8 {
+			legacy = append(legacy, bytes.Clone(k))
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("scan chat keys: %w", err)
+	}
+	for _, k := range legacy {
+		old := subs.Bucket(k)
+		if old == nil {
+			continue
+		}
+		key := make([]byte, 16)
+		copy(key, k)
+		chat, err := subs.CreateBucketIfNotExists(key)
+		if err != nil {
+			return fmt.Errorf("create chat bucket: %w", err)
+		}
+		err = old.ForEach(func(url, v []byte) error {
+			return chat.Put(bytes.Clone(url), bytes.Clone(v))
+		})
+		if err != nil {
+			return fmt.Errorf("copy subscriptions: %w", err)
+		}
+		if err := subs.DeleteBucket(k); err != nil {
+			return fmt.Errorf("delete legacy chat bucket: %w", err)
+		}
+	}
+	return nil
 }
 
 // Close closes the underlying database.
@@ -208,7 +246,7 @@ func (s *Store) AllFeeds() (map[string][]ChatFeed, error) {
 
 // ChatSubs returns all subscriptions across every topic of a chat.
 func (s *Store) ChatSubs(chatID int64) ([]Sub, error) {
-	prefix := chatKey(chatID, 0) // shared 8-byte chat prefix across the chat's topics
+	prefix := chatPrefix(chatID)
 	var subs []Sub
 	err := s.db.View(func(tx *bolt.Tx) error {
 		buckets := tx.Bucket(bucketSubs)
@@ -236,7 +274,7 @@ func (s *Store) ChatSubs(chatID int64) ([]Sub, error) {
 
 // FindFeedThread returns the topic a feed is subscribed under in a chat, if any.
 func (s *Store) FindFeedThread(chatID int64, feedURL string) (threadID int, found bool, err error) {
-	prefix := chatKey(chatID, 0) // shared 8-byte chat prefix across the chat's topics
+	prefix := chatPrefix(chatID)
 	err = s.db.View(func(tx *bolt.Tx) error {
 		subs := tx.Bucket(bucketSubs)
 		return subs.ForEach(func(k, _ []byte) error {
@@ -329,23 +367,21 @@ func (s *Store) TrimSeen(feedURL string, keep int) error {
 	return nil
 }
 
-// chatKey encodes a chat topic; threadID 0 uses a legacy 8-byte chat-only key.
+// chatKey encodes a chat topic as big-endian chatID + threadID.
 func chatKey(chatID int64, threadID int) []byte {
-	if threadID == 0 {
-		b := make([]byte, 8)
-		binary.BigEndian.PutUint64(b, uint64(chatID)) //nolint:gosec // G115
-		return b
-	}
 	b := make([]byte, 16)
 	binary.BigEndian.PutUint64(b[:8], uint64(chatID))   //nolint:gosec // G115
 	binary.BigEndian.PutUint64(b[8:], uint64(threadID)) //nolint:gosec // G115
 	return b
 }
 
+// chatPrefix is the key prefix shared by all the chat's topics.
+func chatPrefix(chatID int64) []byte {
+	return chatKey(chatID, 0)[:8]
+}
+
 func parseChatKey(b []byte) (chatID int64, threadID int) {
 	chatID = int64(binary.BigEndian.Uint64(b[:8])) //nolint:gosec // G115
-	if len(b) >= 16 {
-		threadID = int(binary.BigEndian.Uint64(b[8:])) //nolint:gosec // G115
-	}
+	threadID = int(binary.BigEndian.Uint64(b[8:])) //nolint:gosec // G115
 	return chatID, threadID
 }
