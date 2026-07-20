@@ -40,6 +40,16 @@ func (bot *Bot) checkFeeds(ctx context.Context) {
 	}
 }
 
+// entry is one feed item prepared for delivery.
+type entry struct {
+	url  string // subscription URL, not the item link
+	guid string
+	item *gofeed.Item
+	feed *gofeed.Feed
+	meta string // video meta line, when enriched
+	live bool
+}
+
 // deliverNew sends unseen entries oldest-first; each is marked seen only after at least one chat receives it.
 func (bot *Bot) deliverNew(ctx context.Context, feedURL string, feed *gofeed.Feed, chats []store.ChatFeed) {
 	// Feeds list newest-first; reverse so messages appear chronologically in chat.
@@ -55,45 +65,48 @@ func (bot *Bot) deliverNew(ctx context.Context, feedURL string, feed *gofeed.Fee
 			continue
 		}
 
+		e := entry{url: feedURL, guid: guid, item: item, feed: feed}
 		recipients := recipientsFor(item, chats)
-
-		var meta string
-		var isLive bool
 		if len(recipients) > 0 {
 			if info := bot.videoInfo(ctx, item.Link); info != nil {
-				meta = info.MetaLine()
-				isLive = info.Stream
+				e.meta = info.MetaLine()
+				e.live = info.Stream
 			}
 		}
 
-		var delivered, retryable bool
-		for _, chat := range recipients {
-			if isLive && chat.NoLive {
-				continue
-			}
-			err := bot.sendEntry(ctx, item, feed.Title, feed.Link, meta, chat)
-			var apiErr *telegram.APIError
-			switch {
-			case err == nil:
-				delivered = true
-			case errors.As(err, &apiErr):
-				slog.Warn("Dropping entry rejected by Telegram",
-					"url", feedURL, "guid", guid, "chat_id", chat.ChatID, "error", err)
-			default:
-				slog.Error("Failed to send entry",
-					"url", feedURL, "guid", guid, "chat_id", chat.ChatID, "error", err)
-				retryable = true
-			}
-		}
-
-		// Retry next cycle only when a transient failure left the entry undelivered.
-		if retryable && !delivered {
+		// Retry next cycle when a transient failure left the entry undelivered.
+		if !bot.deliverEntry(ctx, &e, recipients) {
 			continue
 		}
 		if err := bot.store.MarkSeen(feedURL, guid); err != nil {
 			slog.Error("Failed to mark seen", "url", feedURL, "guid", guid, "error", err)
 		}
 	}
+}
+
+// deliverEntry sends e to each accepting chat; reports whether the entry may be
+// marked seen: delivered at least once, or not held back by a transient failure.
+func (bot *Bot) deliverEntry(ctx context.Context, e *entry, recipients []*store.ChatFeed) bool {
+	var delivered, retryable bool
+	for _, chat := range recipients {
+		if e.live && chat.NoLive {
+			continue
+		}
+		err := bot.sendEntry(ctx, e, chat)
+		var apiErr *telegram.APIError
+		switch {
+		case err == nil:
+			delivered = true
+		case errors.As(err, &apiErr):
+			slog.Warn("Dropping entry rejected by Telegram",
+				"url", e.url, "guid", e.guid, "chat_id", chat.ChatID, "error", err)
+		default:
+			slog.Error("Failed to send entry",
+				"url", e.url, "guid", e.guid, "chat_id", chat.ChatID, "error", err)
+			retryable = true
+		}
+	}
+	return delivered || !retryable
 }
 
 // recipientsFor returns the chats whose shorts and title filters accept the item.
@@ -115,30 +128,44 @@ func accepts(item *gofeed.Item, chat *store.ChatFeed) bool {
 	return allow(item.Title, chat.Include, chat.Exclude)
 }
 
-func (bot *Bot) sendEntry(ctx context.Context, item *gofeed.Item, feedTitle, feedLink, meta string, chat *store.ChatFeed) error {
-	var err error
+func (bot *Bot) sendEntry(ctx context.Context, e *entry, chat *store.ChatFeed) error {
+	var text string
+	disablePreview := true
 	switch chat.Format {
 	case formatPreview:
-		caption := format.Preview(item, feedTitle, feedLink)
-		if img := format.ExtractImage(item); img != "" {
-			if err = bot.tg.SendPhoto(ctx, chat.ChatID, chat.ThreadID, img, format.TruncateHTML(caption, format.CaptionLimit)); err == nil {
-				return nil
-			}
-			slog.Warn("Failed to send photo; falling back to message", "url", img, "error", err)
+		text = format.Preview(e.item, e.feed.Title, e.feed.Link)
+		disablePreview = false
+		if bot.sendPreviewPhoto(ctx, e.item, text, chat) {
+			return nil
 		}
-		err = bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, format.TruncateHTML(caption, format.MessageLimit), false)
 	case formatText:
-		err = bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, format.TruncateHTML(format.Text(item), format.MessageLimit), true)
+		text = format.Text(e.item)
 	case formatQuote:
-		err = bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, format.TruncateHTML(format.Quote(item), format.MessageLimit), true)
+		text = format.Quote(e.item)
 	default:
-		text := format.Link(item, meta)
-		err = bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, format.TruncateHTML(text, format.MessageLimit), false)
+		text = format.Link(e.item, e.meta)
+		disablePreview = false
 	}
-	if err != nil {
+	text = format.TruncateHTML(text, format.MessageLimit)
+	if err := bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, text, disablePreview); err != nil {
 		return fmt.Errorf("send entry: %w", err)
 	}
 	return nil
+}
+
+// sendPreviewPhoto sends the preview as a photo with caption; false means
+// no image or a failed send, and the caller falls back to a text message.
+func (bot *Bot) sendPreviewPhoto(ctx context.Context, item *gofeed.Item, caption string, chat *store.ChatFeed) bool {
+	img := format.ExtractImage(item)
+	if img == "" {
+		return false
+	}
+	caption = format.TruncateHTML(caption, format.CaptionLimit)
+	if err := bot.tg.SendPhoto(ctx, chat.ChatID, chat.ThreadID, img, caption); err != nil {
+		slog.Warn("Failed to send photo; falling back to message", "url", img, "error", err)
+		return false
+	}
+	return true
 }
 
 // videoInfo fetches YouTube metadata for a link, or nil on missing key,
