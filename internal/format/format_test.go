@@ -159,6 +159,36 @@ func TestText(t *testing.T) {
 	})
 }
 
+func TestQuote(t *testing.T) {
+	t.Run("wraps body in expandable blockquote below title", func(t *testing.T) {
+		item := &gofeed.Item{
+			Title:       "NextBSD",
+			Link:        "https://example.com/nextbsd",
+			Description: "line one\n\nline two",
+		}
+		got := Quote(item)
+		assert.Contains(t, got, `<b>NextBSD</b></a>`)
+		assert.Contains(t, got, "<blockquote expandable>line one\n\nline two</blockquote>")
+	})
+
+	t.Run("flattens inner blockquotes to avoid nesting", func(t *testing.T) {
+		item := &gofeed.Item{
+			Title:   "quoted",
+			Content: "before <blockquote>inner quote</blockquote> after",
+		}
+		got := Quote(item)
+		assert.Equal(t, 1, strings.Count(got, "<blockquote"))
+		assert.Contains(t, got, "before inner quote after")
+	})
+
+	t.Run("omits blockquote when body is empty", func(t *testing.T) {
+		item := &gofeed.Item{Title: "no body", Link: "https://example.com"}
+		got := Quote(item)
+		assert.NotContains(t, got, "<blockquote")
+		assert.Contains(t, got, `<b>no body</b></a>`)
+	})
+}
+
 func TestExtractImage(t *testing.T) {
 	t.Run("from item image", func(t *testing.T) {
 		item := &gofeed.Item{Image: &gofeed.Image{URL: "https://img.com/1.jpg"}}

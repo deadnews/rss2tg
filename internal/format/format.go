@@ -78,10 +78,41 @@ func Text(item *gofeed.Item) string {
 		b.WriteString("\n\n")
 	}
 
-	// Prefer full content over summary.
-	text := cmp.Or(item.Content, item.Description)
-	b.WriteString(normalizeText(sanitizeHTML(text), 0))
+	b.WriteString(entryBody(item))
 	return b.String()
+}
+
+// Quote formats an entry with title and its content in an expandable blockquote.
+func Quote(item *gofeed.Item) string {
+	var b strings.Builder
+
+	if item.Title != "" {
+		writeBoldTitle(&b, item.Title, item.Link)
+	}
+
+	if body := stripBlockquotes(entryBody(item)); body != "" {
+		if b.Len() > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString("<blockquote expandable>")
+		b.WriteString(body)
+		b.WriteString("</blockquote>")
+	}
+	return b.String()
+}
+
+// entryBody renders the entry's full content, preferring content over summary.
+func entryBody(item *gofeed.Item) string {
+	text := cmp.Or(item.Content, item.Description)
+	return normalizeText(sanitizeHTML(text), 0)
+}
+
+// stripBlockquotes removes blockquote tags so wrapping the body in
+// an outer expandable blockquote can't nest, which Telegram rejects.
+func stripBlockquotes(s string) string {
+	s = strings.ReplaceAll(s, "<blockquote>", "")
+	s = strings.ReplaceAll(s, "</blockquote>", "")
+	return s
 }
 
 // writeBoldTitle writes `<a href="LINK"><b>TITLE</b></a>`, or `<b>TITLE</b>` if link is empty.

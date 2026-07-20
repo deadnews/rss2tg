@@ -129,6 +129,8 @@ func (bot *Bot) sendEntry(ctx context.Context, item *gofeed.Item, feedTitle, fee
 		err = bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, format.TruncateHTML(caption, format.MessageLimit), false)
 	case formatText:
 		err = bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, format.TruncateHTML(format.Text(item), format.MessageLimit), true)
+	case formatQuote:
+		err = bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, format.TruncateHTML(format.Quote(item), format.MessageLimit), true)
 	default:
 		text := format.Link(item, meta)
 		err = bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, format.TruncateHTML(text, format.MessageLimit), false)

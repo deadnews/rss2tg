@@ -34,12 +34,12 @@ See [`compose.dev.yml`](compose.dev.yml) for a Compose reference.
 
 ## Commands
 
-| Command                                                                         | Description                    |
-| ------------------------------------------------------------------------------- | ------------------------------ |
-| `/sub <url> [link\|pw\|text] [shorts] [nolive] [exclude:w1,w2] [include:w1,w2]` | Subscribe current chat to feed |
-| `/unsub <url>`                                                                  | Unsubscribe from feed          |
-| `/list`                                                                         | List subscriptions             |
-| `/help`                                                                         | Show available commands        |
+| Command                                                                                | Description                    |
+| -------------------------------------------------------------------------------------- | ------------------------------ |
+| `/sub <url> [link\|pw\|text\|quote] [shorts] [nolive] [exclude:w1,w2] [include:w1,w2]` | Subscribe current chat to feed |
+| `/unsub <url>`                                                                         | Unsubscribe from feed          |
+| `/list`                                                                                | List subscriptions             |
+| `/help`                                                                                | Show available commands        |
 
 ```text
 /sub https://github.com/moby/moby exclude:alpha,beta,rc
@@ -78,7 +78,14 @@ URL
 ```text
 <a href="URL"><b>Post Title</b></a>
 
-Full sanitized content with links preserved.
+Full content with links preserved.
+```
+
+`quote` — `text` in an expandable blockquote:
+
+```text
+<a href="URL"><b>Post Title</b></a>
+<blockquote expandable>Full content, collapsed to 3 lines.</blockquote>
 ```
 
 `pw` — photo + title + excerpt + attribution (falls back to text if no image):
