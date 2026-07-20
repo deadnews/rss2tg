@@ -1,14 +1,18 @@
 # Changelog
 
-## [0.1.1-alpha.1](https://github.com/deadnews/rss2tg/compare/v0.1.0...v0.1.1-alpha.1) - 2026-07-18
+## [0.2.0](https://github.com/deadnews/rss2tg/compare/v0.1.0...v0.2.0) - 2026-07-20
+
+### Features
+
+- _(format)_ add `quote` message format - ([8fb8579](https://github.com/deadnews/rss2tg/commit/8fb8579d303c4baf8ceb3fc914e1ae5d1ec1704d))
 
 ### Bug fixes
 
-- _(format)_ separate feed paragraphs with blank lines - ([e277c47](https://github.com/deadnews/rss2tg/commit/e277c47c909d7ec4eab059b16b0932072879c2a6))
+- _(format)_ separate feed paragraphs with blank lines ([#4](https://github.com/deadnews/rss2tg/issues/4)) - ([cc28753](https://github.com/deadnews/rss2tg/commit/cc287531c24d1cc8e25038b6aa7485b45fae3813))
 
-### Chores
+### Refactor
 
-- _(prek)_ migrate to toml - ([cc98653](https://github.com/deadnews/rss2tg/commit/cc9865348ee911d7f674aefecd24a652ecf51447))
+- _(store)_ unify chat keys to 16-byte `chatID`+`threadID` ([#5](https://github.com/deadnews/rss2tg/issues/5)) - ([4c3d0bd](https://github.com/deadnews/rss2tg/commit/4c3d0bd1d0316350aea9e6a0600100a6c25a4de8))
 
 ## [0.1.0](https://github.com/deadnews/rss2tg/commits/v0.1.0) - 2026-07-12
 
