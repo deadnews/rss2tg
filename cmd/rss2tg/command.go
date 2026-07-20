@@ -467,7 +467,8 @@ func splitMessages(text string, limit int) []string {
 // reply sends text to a chat, splitting long replies across several messages.
 func (bot *Bot) reply(ctx context.Context, chatID int64, threadID int, text string) {
 	for _, chunk := range splitMessages(text, format.MessageLimit) {
-		if err := bot.tg.SendMessage(ctx, chatID, threadID, format.TruncateHTML(chunk, format.MessageLimit), true); err != nil {
+		chunk = format.TruncateHTML(chunk, format.MessageLimit)
+		if err := bot.tg.SendMessage(ctx, chatID, threadID, chunk, true); err != nil {
 			slog.Error("Failed to send message", "error", err, "chat_id", chatID)
 		}
 	}
