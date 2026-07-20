@@ -73,52 +73,14 @@ func New(path string) (*Store, error) {
 		if _, err := tx.CreateBucketIfNotExists(bucketSeen); err != nil {
 			return fmt.Errorf("create seen bucket: %w", err)
 		}
-		return migrateChatKeys(tx)
-	})
-	if err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("init schema: %w", err)
-	}
-
-	return &Store{db: db}, nil
-}
-
-// migrateChatKeys rewrites pre-topic 8-byte chat keys to the 16-byte
-// chatID+threadID form; removable once existing databases have been opened.
-func migrateChatKeys(tx *bolt.Tx) error {
-	subs := tx.Bucket(bucketSubs)
-	var legacy [][]byte
-	err := subs.ForEach(func(k, _ []byte) error {
-		if len(k) == 8 {
-			legacy = append(legacy, bytes.Clone(k))
-		}
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("scan chat keys: %w", err)
+		_ = db.Close()
+		return nil, fmt.Errorf("init buckets: %w", err)
 	}
-	for _, k := range legacy {
-		old := subs.Bucket(k)
-		if old == nil {
-			continue
-		}
-		key := make([]byte, 16)
-		copy(key, k)
-		chat, err := subs.CreateBucketIfNotExists(key)
-		if err != nil {
-			return fmt.Errorf("create chat bucket: %w", err)
-		}
-		err = old.ForEach(func(url, v []byte) error {
-			return chat.Put(bytes.Clone(url), bytes.Clone(v))
-		})
-		if err != nil {
-			return fmt.Errorf("copy subscriptions: %w", err)
-		}
-		if err := subs.DeleteBucket(k); err != nil {
-			return fmt.Errorf("delete legacy chat bucket: %w", err)
-		}
-	}
-	return nil
+
+	return &Store{db: db}, nil
 }
 
 // Close closes the underlying database.

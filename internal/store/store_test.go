@@ -32,48 +32,6 @@ func TestNew(t *testing.T) {
 	})
 }
 
-func TestNewMigratesLegacyChatKeys(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "test.db")
-
-	db, err := bolt.Open(path, 0o600, nil)
-	require.NoError(t, err)
-	require.NoError(t, db.Update(func(tx *bolt.Tx) error {
-		subs, err := tx.CreateBucketIfNotExists(bucketSubs)
-		if err != nil {
-			return fmt.Errorf("create bucket: %w", err)
-		}
-		key := make([]byte, 8)
-		binary.BigEndian.PutUint64(key, 100)
-		chat, err := subs.CreateBucketIfNotExists(key)
-		if err != nil {
-			return fmt.Errorf("create chat bucket: %w", err)
-		}
-		return chat.Put([]byte("https://a.com/feed"), []byte(`{"format":"link"}`))
-	}))
-	require.NoError(t, db.Close())
-
-	s, err := New(path)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = s.Close() })
-
-	subs, err := s.ListSubs(100, 0)
-	require.NoError(t, err)
-	require.Len(t, subs, 1)
-	assert.Equal(t, "https://a.com/feed", subs[0].URL)
-	assert.Equal(t, "link", subs[0].Format)
-
-	tid, found, err := s.FindFeedThread(100, "https://a.com/feed")
-	require.NoError(t, err)
-	assert.True(t, found)
-	assert.Equal(t, 0, tid)
-
-	all, err := s.AllSubs()
-	require.NoError(t, err)
-	require.Len(t, all, 1)
-	assert.Equal(t, int64(100), all[0].ChatID)
-	assert.Equal(t, 0, all[0].ThreadID)
-}
-
 func TestAddSubAndListSubs(t *testing.T) {
 	s := testStore(t)
 
