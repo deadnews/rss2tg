@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.2.0-alpha.2](https://github.com/deadnews/rss2tg/compare/v0.1.0...v0.2.0-alpha.2) - 2026-07-20
+## [0.2.0-alpha.3](https://github.com/deadnews/rss2tg/compare/v0.1.0...v0.2.0-alpha.3) - 2026-07-20
 
 ### Features
 
@@ -9,6 +9,11 @@
 ### Bug fixes
 
 - _(format)_ separate feed paragraphs with blank lines ([#4](https://github.com/deadnews/rss2tg/issues/4)) - ([cc28753](https://github.com/deadnews/rss2tg/commit/cc287531c24d1cc8e25038b6aa7485b45fae3813))
+
+### Refactor
+
+- _(bot)_ streamline message delivery - ([9a3ae82](https://github.com/deadnews/rss2tg/commit/9a3ae82df1138549d4a6f708285fcd82ae15331f))
+- _(store)_ drop one-time chat-key migration - ([8a05bc4](https://github.com/deadnews/rss2tg/commit/8a05bc43104ddb972cec40847dec26308900e749))
 
 ## [0.1.0](https://github.com/deadnews/rss2tg/commits/v0.1.0) - 2026-07-12
 
