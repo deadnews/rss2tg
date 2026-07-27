@@ -166,13 +166,12 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, threadID int, isFor
 		return
 	}
 
-	url, err := youtube.ResolveURL(ctx, github.FeedURL(args[0]))
+	url, err := resolveFeedURL(ctx, args[0])
 	if err != nil {
 		slog.Error("Failed to resolve feed URL", "url", args[0], "error", err)
 		bot.reply(ctx, chatID, threadID, "Failed to subscribe.")
 		return
 	}
-	url = normalizeURL(url)
 
 	feed, err := bot.parseFeed(ctx, url)
 	if err != nil {
@@ -278,13 +277,12 @@ func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, threadID int, isF
 		return
 	}
 
-	url, err := youtube.ResolveURL(ctx, github.FeedURL(args[0]))
+	url, err := resolveFeedURL(ctx, args[0])
 	if err != nil {
 		slog.Error("Failed to resolve feed URL", "url", args[0], "error", err)
 		bot.reply(ctx, chatID, threadID, "Failed to unsubscribe.")
 		return
 	}
-	url = normalizeURL(url)
 
 	// From General, remove from the feed's own topic but reply in General.
 	target := threadID
@@ -400,6 +398,15 @@ func (bot *Bot) chatLabel(ctx context.Context, cache map[int64]string, chatID in
 	}
 	cache[chatID] = label
 	return label
+}
+
+// resolveFeedURL derives the stored key /sub and /unsub must agree on.
+func resolveFeedURL(ctx context.Context, raw string) (string, error) {
+	url, err := youtube.ResolveURL(ctx, github.FeedURL(raw))
+	if err != nil {
+		return "", fmt.Errorf("resolve feed URL: %w", err)
+	}
+	return normalizeURL(url), nil
 }
 
 // normalizeURL trims trailing slashes so a feed and its slash variant are one sub.
