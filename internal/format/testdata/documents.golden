@@ -1,0 +1,58 @@
+=== heading_stack
+Top
+
+Sub
+
+Body text.
+
+me@e.com
+
+=== mailing_list
+On Mon, someone wrote:
+&gt; the patch breaks build
+
+Fixed in r123.
+
+<pre><code>if (a &lt; b &amp;&amp; c &gt; d) { return; }</code></pre>
+
+=== malformed
+<b>unclosed bold
+
+next para<i>and italic
+
+stray <a href="https://e.com">titled</a> &amp; bad</i></b>
+
+=== nested_inline
+<b>bold <i>and <u>under</u></i></b> then <s>struck</s> and <code>x&lt;y</code>.
+
+=== ordered_with_nested
+1. Install
+
+via apt
+via brew
+
+2. Configure
+3. Run
+
+=== reddit_selfpost
+I built a thing. Source <a href="https://github.com/x/y">here</a>.
+
+Feedback welcome — especially on the parser.
+
+=== table_content
+ Name Size
+
+ alpha 1 MB
+ beta 2 MB
+
+=== wordpress_article
+Release 1.4
+
+The <b>new</b> build is out. See the <a href="https://e.com/notes">notes</a>.
+
+Throughput
+
+Faster startup
+Fewer allocations
+
+<blockquote>It just works.</blockquote>

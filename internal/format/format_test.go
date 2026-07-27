@@ -1,11 +1,16 @@
 package format
 
 import (
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/mmcdole/gofeed"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLink(t *testing.T) {
@@ -142,6 +147,26 @@ func TestText(t *testing.T) {
 		assert.Contains(t, lines[3], "1D Chess")
 	})
 
+	t.Run("unordered list stays compact", func(t *testing.T) {
+		item := &gofeed.Item{
+			Title:   "Changes",
+			Link:    "https://example.com/post",
+			Content: `<ul><li>Faster startup</li><li>Fewer allocations</li></ul>`,
+		}
+		lines := strings.Split(Text(item), "\n")
+		assert.Equal(t, "Faster startup", lines[2])
+		assert.Equal(t, "Fewer allocations", lines[3])
+	})
+
+	t.Run("table rows stay on one line", func(t *testing.T) {
+		item := &gofeed.Item{
+			Title:   "Sizes",
+			Link:    "https://example.com/post",
+			Content: `<table><tr><td>alpha</td><td>1 MB</td></tr><tr><td>beta</td><td>2 MB</td></tr></table>`,
+		}
+		assert.Contains(t, Text(item), "alpha 1 MB\nbeta 2 MB")
+	})
+
 	t.Run("prefers content over description", func(t *testing.T) {
 		item := &gofeed.Item{
 			Description: "short summary",
@@ -219,4 +244,42 @@ func TestExtractImage(t *testing.T) {
 		item := &gofeed.Item{Description: "no images here"}
 		assert.Empty(t, ExtractImage(item))
 	})
+}
+
+var updateGolden = flag.Bool("update", false, "rewrite golden files")
+
+// checkGolden compares got against testdata/name, rewriting it under -update.
+func checkGolden(t *testing.T, name, got string) {
+	t.Helper()
+
+	got = strings.TrimRight(got, "\n") + "\n"
+	path := filepath.Join("testdata", name)
+	if *updateGolden {
+		require.NoError(t, os.MkdirAll("testdata", 0o750))
+		require.NoError(t, os.WriteFile(path, []byte(got), 0o600))
+	}
+	want, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, string(want), got)
+}
+
+func TestGoldenFeeds(t *testing.T) {
+	for _, name := range []string{"hn.xml", "reddit.atom", "youtube.atom"} {
+		t.Run(name, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join("..", "..", "test", name))
+			require.NoError(t, err)
+			feed, err := gofeed.NewParser().ParseString(string(data))
+			require.NoError(t, err)
+
+			var b strings.Builder
+			for _, item := range feed.Items {
+				fmt.Fprintf(&b, "=== LINK\n%s\n", Link(item, ""))
+				fmt.Fprintf(&b, "=== PREVIEW\n%s\n", Preview(item, feed.Title, feed.Link))
+				fmt.Fprintf(&b, "=== TEXT\n%s\n", Text(item))
+				fmt.Fprintf(&b, "=== QUOTE\n%s\n", Quote(item))
+				fmt.Fprintf(&b, "=== IMAGE\n%s\n\n", ExtractImage(item))
+			}
+			checkGolden(t, name+".golden", b.String())
+		})
+	}
 }

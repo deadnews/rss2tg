@@ -151,6 +151,7 @@ func redditDirectURL(u string) string {
 	return u
 }
 
+// extractExcerpt renders a short lead-in, preferring summary over content.
 func extractExcerpt(item *gofeed.Item) string {
 	text := cmp.Or(item.Description, item.Content)
 	return normalizeText(sanitizeHTML(text), maxExcerptLines)

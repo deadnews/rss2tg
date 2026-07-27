@@ -6,48 +6,19 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	xhtml "golang.org/x/net/html"
 )
 
 var (
-	// Tags whose entire contents are dropped.
-	reDropContent = []*regexp.Regexp{
-		regexp.MustCompile(`(?is)<script\b[^>]*>.*?</script\s*>`),
-		regexp.MustCompile(`(?is)<style\b[^>]*>.*?</style\s*>`),
-		regexp.MustCompile(`(?is)<iframe\b[^>]*>.*?</iframe\s*>`),
-		regexp.MustCompile(`(?is)<noscript\b[^>]*>.*?</noscript\s*>`),
-	}
-
-	// HTML comments and doctype declarations
-	// (Reddit wraps content in <!-- SC_OFF -->…<!-- SC_ON -->).
-	reHTMLCommentDecl = regexp.MustCompile(`(?s)<!--.*?-->|<![^>]*>`)
-
-	// Any HTML tag: opening, closing, or self-closing.
-	reHTMLTag = regexp.MustCompile(`<\s*(/?)\s*([a-zA-Z][a-zA-Z0-9-]*)([^>]*)>`)
-
-	// Ordered-list numbering: <ol> block and its <li> boundaries.
-	reOLBlock = regexp.MustCompile(`(?is)<ol[^>]*>(.*?)</ol>`)
-	reLiOpen  = regexp.MustCompile(`\s*<li[^>]*>\s*`)
-	reLiClose = regexp.MustCompile(`\s*</li\s*>\s*`)
-
-	reBr = regexp.MustCompile(`<br\s*/?\s*>`)
-
-	// Block tags (open or close) become paragraph breaks; opening tags too,
-	// since feeds often leave blocks unclosed. blockquote/pre kept for Telegram.
-	reBlockTag = regexp.MustCompile(`(?i)</?(?:p|div|section|article|header|footer|aside|nav|main|figure|figcaption|ul|ol|li|dl|dt|dd|table|thead|tbody|tfoot|tr|td|th|caption|center|address|hr|h[1-6])\b[^>]*>`)
-
-	// Runs of blank lines, collapsed to a single paragraph break.
-	reNewlineRuns = regexp.MustCompile(`\n{2,}`)
-
+	// Anchors left empty once their contents were stripped.
 	reEmptyAnchor = regexp.MustCompile(`<a [^>]*>\s*</a>`)
-
-	// href attribute within a raw tag.
-	reHrefAttr = regexp.MustCompile(`(?i)\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')`)
-
-	// Whitespace entities (Reddit uses &#32; as structural padding).
-	reSpaceEntity = regexp.MustCompile(`&(?:nbsp|#0*32|#0*160|#[xX]0*[aA]0);`)
 
 	// Whitespace immediately inside anchor tags — collapses " /u/X " to "/u/X".
 	reAnchorPad = regexp.MustCompile(`(<a [^>]*>)\s+|\s+(</a>)`)
+
+	// Runs of blank lines, collapsed to a single paragraph break.
+	reNewlineRuns = regexp.MustCompile(`\n{2,}`)
 )
 
 // Telegram HTML-mode inline tags to keep. Everything else is stripped.
@@ -68,116 +39,255 @@ var allowedTags = map[string]bool{
 	"tg-spoiler": true,
 }
 
-// sanitizeHTML maps block tags to paragraph breaks, keeping allowed inline tags.
-func sanitizeHTML(s string) string {
-	for _, re := range reDropContent {
-		s = re.ReplaceAllString(s, "")
-	}
-	s = reHTMLCommentDecl.ReplaceAllString(s, "")
-	s = numberOL(s)
-	s = reBlockTag.ReplaceAllString(s, "\n\n")
-	s = reBr.ReplaceAllString(s, "\n")
+// Tags whose entire contents are dropped.
+var skippedTags = map[string]bool{
+	"script":   true,
+	"style":    true,
+	"iframe":   true,
+	"noscript": true,
+}
 
-	s = reSpaceEntity.ReplaceAllString(s, " ")
-	s = keepAllowedTags(s)
-	s = reEmptyAnchor.ReplaceAllString(s, "")
-	s = reAnchorPad.ReplaceAllString(s, "$1$2")
+// Block tags become paragraph breaks.
+var blockTags = map[string]bool{
+	"p": true, "div": true, "section": true, "article": true, "header": true,
+	"footer": true, "aside": true, "nav": true, "main": true, "figure": true,
+	"figcaption": true, "ul": true, "ol": true, "dl": true, "table": true,
+	"thead": true, "tbody": true, "tfoot": true, "caption": true, "center": true,
+	"address": true, "hr": true,
+	"h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
+}
+
+// Item tags open a line of their own; cell tags separate within that line.
+var (
+	itemTags = map[string]bool{"li": true, "dt": true, "dd": true, "tr": true}
+	cellTags = map[string]bool{"td": true, "th": true}
+)
+
+// list is one <ol>/<ul> nesting level, so numbering counts only its own items.
+type list struct {
+	ordered bool
+	n       int
+}
+
+// sanitizeHTML maps block tags to paragraph breaks, keeping allowed inline tags.
+func sanitizeHTML(in string) string {
+	var s sanitizer
+	z := xhtml.NewTokenizer(strings.NewReader(in))
+	for {
+		switch tt := z.Next(); tt {
+		case xhtml.ErrorToken:
+			return s.finish()
+		case xhtml.TextToken:
+			s.text(string(z.Text()))
+		case xhtml.StartTagToken, xhtml.SelfClosingTagToken:
+			name, hasAttr := z.TagName()
+			s.startTag(z, string(name), hasAttr, tt == xhtml.StartTagToken)
+		case xhtml.EndTagToken:
+			name, _ := z.TagName()
+			s.endTag(string(name))
+		case xhtml.CommentToken, xhtml.DoctypeToken:
+		}
+	}
+}
+
+// sanitizer folds an HTML token stream into Telegram's tag subset. Breaks are
+// queued, not written, so they collapse and vanish at a tag's edges.
+type sanitizer struct {
+	b        strings.Builder
+	open     []string // allowed tags awaiting their closing tag
+	lists    []list
+	skip     int    // depth inside a dropped-content tag
+	dropped  int    // anchors dropped but whose text is kept
+	pending  string // break held until the next content
+	suppress bool   // drop the next break; it would only pad a tag
+}
+
+// queueBreak holds the widest break seen; adjacent block tags never stack.
+func (s *sanitizer) queueBreak(brk string) {
+	if !s.suppress && len(brk) > len(s.pending) {
+		s.pending = brk
+	}
+}
+
+// queueLine adds a line, so consecutive <br> still open a new paragraph.
+func (s *sanitizer) queueLine() {
+	if !s.suppress && len(s.pending) < 2 {
+		s.pending += "\n"
+	}
+}
+
+func (s *sanitizer) write(str string) {
+	s.b.WriteString(s.pending)
+	s.b.WriteString(str)
+	s.pending = ""
+	s.suppress = false
+}
+
+// writeOpen emits a tag and drops the break that would pad its first content.
+func (s *sanitizer) writeOpen(str string) {
+	s.write(str)
+	s.suppress = true
+}
+
+// writeClose emits a tag, dropping the break that would pad its last content.
+func (s *sanitizer) writeClose(str string) {
+	s.pending = ""
+	s.b.WriteString(str)
+	s.suppress = false
+}
+
+func (s *sanitizer) closeDownTo(i int) {
+	for _, name := range slices.Backward(s.open[i:]) {
+		s.writeClose("</" + name + ">")
+	}
+	s.open = s.open[:i]
+}
+
+func (s *sanitizer) text(t string) {
+	if s.skip > 0 {
+		return
+	}
+	if strings.TrimSpace(t) == "" {
+		// Beside a queued break or a tag edge, whitespace is markup indentation.
+		if s.pending != "" || s.suppress {
+			return
+		}
+		// Between inline content it separates words, however it was written.
+		t = " "
+	}
+	s.write(escapeText(t))
+}
+
+func (s *sanitizer) startTag(z *xhtml.Tokenizer, name string, hasAttr, isStart bool) {
+	if skippedTags[name] {
+		if isStart {
+			s.skip++
+		}
+		return
+	}
+	if s.skip > 0 {
+		return
+	}
+
+	switch {
+	case name == "br":
+		s.queueLine()
+	case name == "ol" || name == "ul":
+		s.queueBreak("\n\n")
+		s.lists = append(s.lists, list{ordered: name == "ol"})
+	case itemTags[name]:
+		s.queueBreak("\n")
+		s.number(name)
+	case cellTags[name]:
+		s.write(" ")
+	case blockTags[name]:
+		s.queueBreak("\n\n")
+	case !allowedTags[name]:
+	case name == "a":
+		s.openAnchor(z, hasAttr)
+	default:
+		s.writeOpen("<" + name + ">")
+		s.open = append(s.open, name)
+	}
+}
+
+// number prefixes a list item when its nearest enclosing list is ordered.
+func (s *sanitizer) number(name string) {
+	if name != "li" || len(s.lists) == 0 {
+		return
+	}
+	cur := &s.lists[len(s.lists)-1]
+	if !cur.ordered {
+		return
+	}
+	cur.n++
+	s.write(strconv.Itoa(cur.n) + ". ")
+}
+
+func (s *sanitizer) openAnchor(z *xhtml.Tokenizer, hasAttr bool) {
+	href := anchorHref(z, hasAttr)
+	// Telegram rejects nested links, so an inner anchor keeps only its text.
+	if href == "" || slices.Contains(s.open, "a") {
+		s.dropped++
+		return
+	}
+	s.writeOpen(`<a href="` + href + `">`)
+	s.open = append(s.open, "a")
+}
+
+func (s *sanitizer) endTag(name string) {
+	if skippedTags[name] {
+		if s.skip > 0 {
+			s.skip--
+		}
+		return
+	}
+	if s.skip > 0 {
+		return
+	}
+
+	switch {
+	case name == "ol" || name == "ul":
+		s.queueBreak("\n\n")
+		if len(s.lists) > 0 {
+			s.lists = s.lists[:len(s.lists)-1]
+		}
+	case itemTags[name]:
+		// Queued now so the next item's indentation reads as markup.
+		s.queueBreak("\n")
+	case cellTags[name]:
+	case blockTags[name]:
+		s.queueBreak("\n\n")
+	case !allowedTags[name]:
+	case name == "a" && s.dropped > 0:
+		s.dropped--
+	default:
+		s.closeInnermost(name)
+	}
+}
+
+func (s *sanitizer) closeInnermost(name string) {
+	for i, open := range slices.Backward(s.open) {
+		if open == name {
+			s.closeDownTo(i)
+			return
+		}
+	}
+}
+
+func (s *sanitizer) finish() string {
+	s.closeDownTo(0)
+
+	out := s.b.String()
+	out = reEmptyAnchor.ReplaceAllString(out, "")
+	out = reAnchorPad.ReplaceAllString(out, "$1$2")
 
 	// Removed tags leave stray blank-line runs; collapse and trim them.
-	s = reNewlineRuns.ReplaceAllString(s, "\n\n")
-	return strings.Trim(s, "\n")
+	out = reNewlineRuns.ReplaceAllString(out, "\n\n")
+	return strings.Trim(out, "\n")
 }
 
-// keepAllowedTags keeps only Telegram-supported tags and escapes all other text.
-func keepAllowedTags(s string) string {
-	var b strings.Builder
-	last := 0
-	droppedAnchors := 0
-	var open []string
-	closeTags := func(downTo int) {
-		for _, name := range slices.Backward(open[downTo:]) {
-			b.WriteString("</")
-			b.WriteString(name)
-			b.WriteByte('>')
-		}
-		open = open[:downTo]
-	}
-	for _, loc := range reHTMLTag.FindAllStringSubmatchIndex(s, -1) {
-		b.WriteString(escapeText(s[last:loc[0]]))
-		last = loc[1]
-		closing := s[loc[2]:loc[3]] == "/"
-		name := strings.ToLower(s[loc[4]:loc[5]])
-		switch {
-		case !allowedTags[name]:
-		case name == "a" && closing && droppedAnchors > 0:
-			droppedAnchors--
-		case closing:
-			i := len(open) - 1
-			for i >= 0 && open[i] != name {
-				i--
-			}
-			if i >= 0 {
-				closeTags(i)
-			}
-		case name == "a":
-			if href := extractHref(s[loc[6]:loc[7]]); href != "" {
-				b.WriteString(`<a href="`)
-				b.WriteString(href)
-				b.WriteString(`">`)
-				open = append(open, name)
-			} else {
-				droppedAnchors++
-			}
-		default:
-			b.WriteByte('<')
-			b.WriteString(name)
-			b.WriteByte('>')
-			open = append(open, name)
+// anchorHref returns the tag's href re-escaped, or empty if absent or unsafe.
+func anchorHref(z *xhtml.Tokenizer, hasAttr bool) string {
+	for hasAttr {
+		var key, val []byte
+		key, val, hasAttr = z.TagAttr()
+		if string(key) == "href" && allowedScheme(string(val)) {
+			return html.EscapeString(string(val))
 		}
 	}
-	b.WriteString(escapeText(s[last:]))
-	closeTags(0)
-	return b.String()
+	return ""
 }
 
-// escapeText normalizes entities then escapes HTML specials in plain text.
+// escapeText turns no-break spaces into plain ones and escapes HTML specials.
 func escapeText(s string) string {
-	return html.EscapeString(html.UnescapeString(s))
-}
-
-// extractHref returns the href re-escaped for output, or empty if absent or an unsafe scheme.
-func extractHref(attrs string) string {
-	m := reHrefAttr.FindStringSubmatch(attrs)
-	if m == nil {
-		return ""
-	}
-	href := m[1]
-	if href == "" {
-		href = m[2]
-	}
-	href = html.UnescapeString(href)
-	if !allowedScheme(href) {
-		return ""
-	}
-	return html.EscapeString(href)
+	return html.EscapeString(strings.ReplaceAll(s, " ", " "))
 }
 
 // allowedScheme reports whether href is safe to render as a Telegram link.
 func allowedScheme(href string) bool {
 	s := strings.ToLower(strings.TrimSpace(href))
 	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
-}
-
-// numberOL renders <ol> items as compact single-newline "N." lines.
-func numberOL(s string) string {
-	return reOLBlock.ReplaceAllStringFunc(s, func(match string) string {
-		body := reLiClose.ReplaceAllString(reOLBlock.FindStringSubmatch(match)[1], "")
-		counter := 0
-		return reLiOpen.ReplaceAllStringFunc(body, func(string) string {
-			counter++
-			return "\n" + strconv.Itoa(counter) + ". "
-		})
-	})
 }
 
 // normalizeText collapses whitespace per line, reduces blank-line runs to a
