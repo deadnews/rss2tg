@@ -21,6 +21,8 @@ func TestSanitizeHTML(t *testing.T) {
 		{"keeps strong", "<strong>Hello</strong>", "<strong>Hello</strong>"},
 		{"keeps italic and em", "<i>one</i> <em>two</em>", "<i>one</i> <em>two</em>"},
 		{"keeps code and pre", "<code>x</code> <pre>y</pre>", "<code>x</code> <pre>y</pre>"},
+		{"keeps indentation inside pre", "<pre>a\n  b</pre>", "<pre>a\n  b</pre>"},
+		{"drops the newline opening a pre", "<pre>\na</pre>", "<pre>a</pre>"},
 		{"keeps links", `Click <a href="https://example.com">here</a>!`, `Click <a href="https://example.com">here</a>!`},
 		{"escapes href quotes", `<a href='https://example.com/?q="x"&amp;y=1'>go</a>`, `<a href="https://example.com/?q=&#34;x&#34;&amp;y=1">go</a>`},
 		{"strips unknown tag but keeps content", "<span>kept</span>", "kept"},
@@ -93,6 +95,13 @@ var documents = map[string]string{
 
 	"mailing_list": `<p>On Mon, someone wrote:<br>&gt; the patch breaks build<br><br>Fixed in r123.</p>
 <pre><code>if (a &lt; b &amp;&amp; c &gt; d) { return; }</code></pre>`,
+
+	"github_release": `<h2>What's Changed</h2><ul><li>Faster startup by <a href="https://github.com/x">@x</a></li></ul>
+<p>Install:</p>
+<pre><code>go install github.com/x/y@latest
+  # or, from source
+make build
+</code></pre>`,
 
 	"table_content": `<table><thead><tr><th>Name</th><th>Size</th></tr></thead>
 <tbody><tr><td>alpha</td><td>1 MB</td></tr><tr><td>beta</td><td>2 MB</td></tr></tbody></table>`,

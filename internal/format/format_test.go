@@ -179,6 +179,17 @@ func TestText(t *testing.T) {
 		assert.Contains(t, Text(item), "alpha 1 MB\nbeta 2 MB")
 	})
 
+	t.Run("code block keeps its indentation", func(t *testing.T) {
+		item := &gofeed.Item{
+			Title:   "Release 1.4",
+			Link:    "https://example.com/post",
+			Content: "<p>Install:</p><pre><code>\nrun:\n    go install ./...\n</code></pre><p>Done.</p>",
+		}
+		got := Text(item)
+		assert.Contains(t, got, "<pre><code>run:\n    go install ./...\n</code></pre>")
+		assert.Contains(t, got, "\n\nDone.")
+	})
+
 	t.Run("prefers content over description", func(t *testing.T) {
 		item := &gofeed.Item{
 			Description: "short summary",
