@@ -106,6 +106,18 @@ func TestPreview(t *testing.T) {
 		assert.Equal(t, maxExcerptLines, strings.Count(got, "line"))
 	})
 
+	t.Run("closes a tag the excerpt limit cuts through", func(t *testing.T) {
+		item := &gofeed.Item{
+			Title:       "Title",
+			Link:        "https://example.com",
+			Description: "<blockquote>" + strings.Repeat("<p>line</p>", 8) + "</blockquote>",
+		}
+		got := Preview(item, "Feed", "")
+		assert.Equal(t, 1, strings.Count(got, "<blockquote>"))
+		assert.Equal(t, 1, strings.Count(got, "</blockquote>"))
+		assert.Contains(t, got, "line</blockquote>\n\nvia")
+	})
+
 	t.Run("no feed title", func(t *testing.T) {
 		item := &gofeed.Item{
 			Title: "Title",

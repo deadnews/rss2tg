@@ -70,6 +70,35 @@ func applyTag(open []string, tag string) []string {
 	return append(open, name)
 }
 
+// closeOpenTags closes tags a cut left open; Telegram rejects unbalanced HTML.
+func closeOpenTags(s string) string {
+	var open []string
+	for rest := s; ; {
+		_, after, found := strings.Cut(rest, "<")
+		if !found {
+			break
+		}
+		tag, next, found := strings.Cut(after, ">")
+		if !found {
+			break
+		}
+		open = applyTag(open, tag)
+		rest = next
+	}
+	if len(open) == 0 {
+		return s
+	}
+
+	var b strings.Builder
+	b.WriteString(s)
+	for _, name := range slices.Backward(open) {
+		b.WriteString("</")
+		b.WriteString(name)
+		b.WriteString(">")
+	}
+	return b.String()
+}
+
 // entityLen returns the visible UTF-16 length and byte size of a leading
 // HTML entity, or zeros if there is none.
 func entityLen(s string) (units, size int) {
