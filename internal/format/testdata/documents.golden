@@ -1,3 +1,15 @@
+=== github_release
+What&#39;s Changed
+
+Faster startup by <a href="https://github.com/x">@x</a>
+
+Install:
+
+<pre><code>go install github.com/x/y@latest
+  # or, from source
+make build
+</code></pre>
+
 === heading_stack
 Top
 

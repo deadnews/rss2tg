@@ -147,6 +147,14 @@ func (s *sanitizer) text(t string) {
 	if s.skip > 0 {
 		return
 	}
+	if slices.Contains(s.open, "pre") {
+		// Verbatim, minus the newline HTML drops after an opening tag.
+		if s.suppress {
+			t = strings.TrimPrefix(t, "\n")
+		}
+		s.write(escapeText(t))
+		return
+	}
 	if strings.TrimSpace(t) == "" {
 		// Beside a queued break or a tag edge, whitespace is markup indentation.
 		if s.pending != "" || s.suppress {
@@ -290,19 +298,30 @@ func allowedScheme(href string) bool {
 	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
 }
 
-// normalizeText collapses whitespace per line, reduces blank-line runs to a
-// single paragraph break, and keeps at most maxLines non-blank lines (0 = no limit).
+// normalizeText collapses whitespace per line outside <pre>, reduces blank-line
+// runs to a single paragraph break, and keeps at most maxLines non-blank lines
+// (0 = no limit).
 func normalizeText(text string, maxLines int) string {
 	var lines []string
 	content := 0
+	verbatim := false
 	for line := range strings.SplitSeq(text, "\n") {
-		line = strings.Join(strings.Fields(line), " ")
-		if line == "" {
-			// Collapse consecutive blanks; skip leading blanks.
-			if len(lines) > 0 && lines[len(lines)-1] != "" {
-				lines = append(lines, "")
+		keep := verbatim
+		switch {
+		case strings.Contains(line, "</pre>"):
+			keep, verbatim = true, false
+		case strings.Contains(line, "<pre>"):
+			keep, verbatim = true, true
+		}
+		if !keep {
+			line = strings.Join(strings.Fields(line), " ")
+			if line == "" {
+				// Collapse consecutive blanks; skip leading blanks.
+				if len(lines) > 0 && lines[len(lines)-1] != "" {
+					lines = append(lines, "")
+				}
+				continue
 			}
-			continue
 		}
 		lines = append(lines, line)
 		content++
