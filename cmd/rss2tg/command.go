@@ -54,6 +54,24 @@ const helpText = `<b>Available commands:</b>
 • <code>/sub</code> from General creates a topic per feed; inside a topic subscribes there.
 • <code>/list</code> from General shows every topic.`
 
+// scope is the chat topic a command was issued from.
+type scope struct {
+	chatID   int64
+	threadID int
+	general  bool // a forum's General topic, from which commands span every topic
+	private  bool
+}
+
+func newScope(msg *telegram.Message) scope {
+	s := scope{chatID: msg.Chat.ID, private: msg.Chat.Type == "private"}
+	// Scope the command to its forum topic; General topic reports no thread.
+	if msg.IsTopicMessage {
+		s.threadID = msg.MessageThreadID
+	}
+	s.general = msg.Chat.IsForum && s.threadID == 0
+	return s
+}
+
 // handleCommand dispatches a bot command from an authorized sender.
 func (bot *Bot) handleCommand(ctx context.Context, msg *telegram.Message) {
 	parts := strings.Fields(msg.Text)
@@ -73,21 +91,16 @@ func (bot *Bot) handleCommand(ctx context.Context, msg *telegram.Message) {
 		return
 	}
 
-	// Scope the command to its forum topic; General topic reports no thread.
-	var threadID int
-	if msg.IsTopicMessage {
-		threadID = msg.MessageThreadID
-	}
-
+	s := newScope(msg)
 	switch cmd {
 	case "/start", "/help":
-		bot.reply(ctx, msg.Chat.ID, threadID, helpText)
+		bot.reply(ctx, s, helpText)
 	case "/sub":
-		bot.handleSub(ctx, msg.Chat.ID, threadID, msg.Chat.IsForum, parts[1:])
+		bot.handleSub(ctx, s, parts[1:])
 	case "/unsub":
-		bot.handleUnsub(ctx, msg.Chat.ID, threadID, msg.Chat.IsForum, parts[1:])
+		bot.handleUnsub(ctx, s, parts[1:])
 	case "/list":
-		bot.handleList(ctx, msg.Chat.ID, threadID, msg.Chat.IsForum, msg.Chat.Type == "private")
+		bot.handleList(ctx, s)
 	}
 }
 
@@ -154,38 +167,39 @@ func parseSubArgs(args []string) (parsedSubArgs, bool) {
 	return out, true
 }
 
-func (bot *Bot) handleSub(ctx context.Context, chatID int64, threadID int, isForum bool, args []string) {
+func (bot *Bot) handleSub(ctx context.Context, s scope, args []string) {
 	if len(args) == 0 {
-		bot.reply(ctx, chatID, threadID, subUsage)
+		bot.reply(ctx, s, subUsage)
 		return
 	}
 
 	opts, ok := parseSubArgs(args[1:])
 	if !ok {
-		bot.reply(ctx, chatID, threadID, subUsage)
+		bot.reply(ctx, s, subUsage)
 		return
 	}
 
 	url, err := resolveFeedURL(ctx, args[0])
 	if err != nil {
 		slog.Error("Failed to resolve feed URL", "url", args[0], "error", err)
-		bot.reply(ctx, chatID, threadID, "Failed to subscribe.")
+		bot.reply(ctx, s, "Failed to subscribe.")
 		return
 	}
 
 	feed, err := bot.parseFeed(ctx, url)
 	if err != nil {
 		slog.Error("Failed to parse feed", "url", url, "error", err)
-		bot.reply(ctx, chatID, threadID, "Failed to subscribe.")
+		bot.reply(ctx, s, "Failed to subscribe.")
 		return
 	}
 
 	// In a forum's General topic, give each feed its own topic.
-	if isForum && threadID == 0 {
-		var ok bool
-		if threadID, ok = bot.forumTopicFor(ctx, chatID, url, feed.Title); !ok {
+	if s.general {
+		threadID, ok := bot.forumTopicFor(ctx, s, url, feed.Title)
+		if !ok {
 			return
 		}
+		s.threadID, s.general = threadID, false
 	}
 
 	sub := store.Sub{
@@ -197,22 +211,22 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, threadID int, isFor
 		Exclude: opts.exclude,
 		Include: opts.include,
 	}
-	existed, err := bot.store.AddSub(chatID, threadID, &sub)
+	existed, err := bot.store.AddSub(s.chatID, s.threadID, &sub)
 	if err != nil {
 		slog.Error("Failed to add subscription", "error", err)
-		bot.reply(ctx, chatID, threadID, "Failed to subscribe.")
+		bot.reply(ctx, s, "Failed to subscribe.")
 		return
 	}
 
 	// An update only changes options; new entries wait for the next poll cycle.
 	if existed {
-		bot.reply(ctx, chatID, threadID, fmt.Sprintf("Updated subscription for %s (%s)", html.EscapeString(url), sub.Format))
+		bot.reply(ctx, s, fmt.Sprintf("Updated subscription for %s (%s)", html.EscapeString(url), sub.Format))
 		return
 	}
-	bot.reply(ctx, chatID, threadID, fmt.Sprintf("Subscribed to %s (%s)", html.EscapeString(url), sub.Format))
+	bot.reply(ctx, s, fmt.Sprintf("Subscribed to %s (%s)", html.EscapeString(url), sub.Format))
 
 	// Deliver to every chat subscribed to the URL.
-	newChat := sub.ChatFeed(chatID, threadID)
+	newChat := sub.ChatFeed(s.chatID, s.threadID)
 	chats := []store.ChatFeed{newChat}
 	if feeds, err := bot.store.AllFeeds(); err == nil {
 		chats = feeds[url]
@@ -223,11 +237,11 @@ func (bot *Bot) handleSub(ctx context.Context, chatID int64, threadID int, isFor
 }
 
 // forumTopicFor returns the feed's existing topic or creates one named after it.
-func (bot *Bot) forumTopicFor(ctx context.Context, chatID int64, feedURL, title string) (threadID int, ok bool) {
-	existing, found, err := bot.store.FindFeedThread(chatID, feedURL)
+func (bot *Bot) forumTopicFor(ctx context.Context, s scope, feedURL, title string) (threadID int, ok bool) {
+	existing, found, err := bot.store.FindFeedThread(s.chatID, feedURL)
 	if err != nil {
-		slog.Error("Failed to find feed thread", "chat_id", chatID, "error", err)
-		bot.reply(ctx, chatID, 0, "Failed to subscribe.")
+		slog.Error("Failed to find feed thread", "chat_id", s.chatID, "error", err)
+		bot.reply(ctx, s, "Failed to subscribe.")
 		return 0, false
 	}
 	if found {
@@ -235,14 +249,14 @@ func (bot *Bot) forumTopicFor(ctx context.Context, chatID int64, feedURL, title 
 	}
 
 	name := cmp.Or(title, feedURL)
-	threadID, err = bot.tg.CreateForumTopic(ctx, chatID, name)
+	threadID, err = bot.tg.CreateForumTopic(ctx, s.chatID, name)
 	if err != nil {
-		slog.Error("Failed to create forum topic", "chat_id", chatID, "error", err)
-		bot.reply(ctx, chatID, 0, "Failed to create topic. The bot must be an admin with Manage Topics.")
+		slog.Error("Failed to create forum topic", "chat_id", s.chatID, "error", err)
+		bot.reply(ctx, s, "Failed to create topic. The bot must be an admin with Manage Topics.")
 		return 0, false
 	}
 	// Telegram auto-pins the creation message; it is cleared reactively on the service message.
-	bot.reply(ctx, chatID, 0, fmt.Sprintf("Created topic <b>%s</b>", html.EscapeString(name)))
+	bot.reply(ctx, s, fmt.Sprintf("Created topic <b>%s</b>", html.EscapeString(name)))
 	return threadID, true
 }
 
@@ -271,26 +285,26 @@ func (bot *Bot) deliverInitialEntries(ctx context.Context, feedURL string, feed 
 	bot.deliverNew(ctx, feedURL, feed, chats)
 }
 
-func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, threadID int, isForum bool, args []string) {
+func (bot *Bot) handleUnsub(ctx context.Context, s scope, args []string) {
 	if len(args) == 0 {
-		bot.reply(ctx, chatID, threadID, unsubUsage)
+		bot.reply(ctx, s, unsubUsage)
 		return
 	}
 
 	url, err := resolveFeedURL(ctx, args[0])
 	if err != nil {
 		slog.Error("Failed to resolve feed URL", "url", args[0], "error", err)
-		bot.reply(ctx, chatID, threadID, "Failed to unsubscribe.")
+		bot.reply(ctx, s, "Failed to unsubscribe.")
 		return
 	}
 
 	// From General, remove from the feed's own topic but reply in General.
-	target := threadID
-	if isForum && threadID == 0 {
-		id, found, err := bot.store.FindFeedThread(chatID, url)
+	target := s.threadID
+	if s.general {
+		id, found, err := bot.store.FindFeedThread(s.chatID, url)
 		if err != nil {
-			slog.Error("Failed to find feed thread", "chat_id", chatID, "error", err)
-			bot.reply(ctx, chatID, threadID, "Failed to unsubscribe.")
+			slog.Error("Failed to find feed thread", "chat_id", s.chatID, "error", err)
+			bot.reply(ctx, s, "Failed to unsubscribe.")
 			return
 		}
 		if found {
@@ -298,43 +312,43 @@ func (bot *Bot) handleUnsub(ctx context.Context, chatID int64, threadID int, isF
 		}
 	}
 
-	existed, err := bot.store.RemoveSub(chatID, target, url)
+	existed, err := bot.store.RemoveSub(s.chatID, target, url)
 	if err != nil {
 		slog.Error("Failed to remove subscription", "error", err)
-		bot.reply(ctx, chatID, threadID, "Failed to unsubscribe.")
+		bot.reply(ctx, s, "Failed to unsubscribe.")
 		return
 	}
 
 	if !existed {
-		bot.reply(ctx, chatID, threadID, "Not subscribed to "+html.EscapeString(url))
+		bot.reply(ctx, s, "Not subscribed to "+html.EscapeString(url))
 		return
 	}
 
-	bot.reply(ctx, chatID, threadID, "Unsubscribed from "+html.EscapeString(url))
+	bot.reply(ctx, s, "Unsubscribed from "+html.EscapeString(url))
 }
 
-func (bot *Bot) handleList(ctx context.Context, chatID int64, threadID int, isForum, isPrivate bool) {
-	if isPrivate {
-		bot.listAllSubs(ctx, chatID)
+func (bot *Bot) handleList(ctx context.Context, s scope) {
+	if s.private {
+		bot.listAllSubs(ctx, s)
 		return
 	}
 
 	var subs []store.Sub
 	var err error
 	// From a forum's General topic, list every topic's subs.
-	if isForum && threadID == 0 {
-		subs, err = bot.store.ChatSubs(chatID)
+	if s.general {
+		subs, err = bot.store.ChatSubs(s.chatID)
 	} else {
-		subs, err = bot.store.ListSubs(chatID, threadID)
+		subs, err = bot.store.ListSubs(s.chatID, s.threadID)
 	}
 	if err != nil {
 		slog.Error("Failed to list subscriptions", "error", err)
-		bot.reply(ctx, chatID, threadID, "Failed to list subscriptions.")
+		bot.reply(ctx, s, "Failed to list subscriptions.")
 		return
 	}
 
 	if len(subs) == 0 {
-		bot.reply(ctx, chatID, threadID, "No subscriptions.")
+		bot.reply(ctx, s, "No subscriptions.")
 		return
 	}
 
@@ -346,19 +360,19 @@ func (bot *Bot) handleList(ctx context.Context, chatID int64, threadID int, isFo
 		writeSub(&b, &subs[i])
 	}
 
-	bot.reply(ctx, chatID, threadID, b.String())
+	bot.reply(ctx, s, b.String())
 }
 
 // listAllSubs replies with every subscription across all chats, grouped by chat.
-func (bot *Bot) listAllSubs(ctx context.Context, chatID int64) {
+func (bot *Bot) listAllSubs(ctx context.Context, s scope) {
 	subs, err := bot.store.AllSubs()
 	if err != nil {
 		slog.Error("Failed to list subscriptions", "error", err)
-		bot.reply(ctx, chatID, 0, "Failed to list subscriptions.")
+		bot.reply(ctx, s, "Failed to list subscriptions.")
 		return
 	}
 	if len(subs) == 0 {
-		bot.reply(ctx, chatID, 0, "No subscriptions.")
+		bot.reply(ctx, s, "No subscriptions.")
 		return
 	}
 
@@ -382,7 +396,7 @@ func (bot *Bot) listAllSubs(ctx context.Context, chatID int64) {
 		writeSub(&b, &cf.Sub)
 	}
 
-	bot.reply(ctx, chatID, 0, b.String())
+	bot.reply(ctx, s, b.String())
 }
 
 // chatLabel resolves a chat's title, or its numeric ID when unavailable.
@@ -472,11 +486,11 @@ func splitMessages(text string, limit int) []string {
 }
 
 // reply sends text to a chat, splitting long replies across several messages.
-func (bot *Bot) reply(ctx context.Context, chatID int64, threadID int, text string) {
+func (bot *Bot) reply(ctx context.Context, s scope, text string) {
 	for _, chunk := range splitMessages(text, format.MessageLimit) {
 		chunk = format.TruncateHTML(chunk, format.MessageLimit)
-		if err := bot.tg.SendMessage(ctx, chatID, threadID, chunk, true); err != nil {
-			slog.Error("Failed to send message", "error", err, "chat_id", chatID)
+		if err := bot.tg.SendMessage(ctx, s.chatID, s.threadID, chunk, true); err != nil {
+			slog.Error("Failed to send message", "error", err, "chat_id", s.chatID)
 		}
 	}
 }
