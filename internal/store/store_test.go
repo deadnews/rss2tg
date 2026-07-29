@@ -223,6 +223,22 @@ func TestFindFeedThread(t *testing.T) {
 	assert.False(t, found)
 }
 
+func TestFindFeedThreadNegativeChatID(t *testing.T) {
+	s := testStore(t)
+
+	const supergroup = -1001234567890
+
+	_, err := s.AddSub(supergroup, 3, &Sub{URL: "https://a.com/feed", Format: "link"})
+	require.NoError(t, err)
+	_, err = s.AddSub(100, 0, &Sub{URL: "https://a.com/feed", Format: "link"})
+	require.NoError(t, err)
+
+	tid, found, err := s.FindFeedThread(supergroup, "https://a.com/feed")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, 3, tid)
+}
+
 func TestAddSubRoundTripsShorts(t *testing.T) {
 	s := testStore(t)
 

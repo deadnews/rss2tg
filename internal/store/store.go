@@ -211,22 +211,20 @@ func (s *Store) ChatSubs(chatID int64) ([]Sub, error) {
 	prefix := chatPrefix(chatID)
 	var subs []Sub
 	err := s.db.View(func(tx *bolt.Tx) error {
-		buckets := tx.Bucket(bucketSubs)
-		return buckets.ForEach(func(k, _ []byte) error {
-			if !bytes.HasPrefix(k, prefix) {
-				return nil
-			}
-			chat := buckets.Bucket(k)
+		root := tx.Bucket(bucketSubs)
+		cur := root.Cursor()
+		for k, _ := cur.Seek(prefix); bytes.HasPrefix(k, prefix); k, _ = cur.Next() {
+			chat := root.Bucket(k)
 			if chat == nil {
-				return nil
+				continue
 			}
 			topicSubs, err := collectSubs(chat)
 			if err != nil {
 				return err
 			}
 			subs = append(subs, topicSubs...)
-			return nil
-		})
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list chat subscriptions: %w", err)
@@ -238,17 +236,16 @@ func (s *Store) ChatSubs(chatID int64) ([]Sub, error) {
 func (s *Store) FindFeedThread(chatID int64, feedURL string) (threadID int, found bool, err error) {
 	prefix := chatPrefix(chatID)
 	err = s.db.View(func(tx *bolt.Tx) error {
-		subs := tx.Bucket(bucketSubs)
-		return subs.ForEach(func(k, _ []byte) error {
-			if found || !bytes.HasPrefix(k, prefix) {
-				return nil
-			}
-			if chat := subs.Bucket(k); chat != nil && chat.Get([]byte(feedURL)) != nil {
+		root := tx.Bucket(bucketSubs)
+		cur := root.Cursor()
+		for k, _ := cur.Seek(prefix); bytes.HasPrefix(k, prefix); k, _ = cur.Next() {
+			if chat := root.Bucket(k); chat != nil && chat.Get([]byte(feedURL)) != nil {
 				_, threadID = parseChatKey(k)
 				found = true
+				return nil
 			}
-			return nil
-		})
+		}
+		return nil
 	})
 	if err != nil {
 		return 0, false, fmt.Errorf("find feed thread: %w", err)
