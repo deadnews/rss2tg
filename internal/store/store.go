@@ -291,6 +291,19 @@ func (s *Store) MarkSeen(feedURL, guid string) error {
 
 // TrimSeen keeps a feed's newest keep entries by mark time.
 func (s *Store) TrimSeen(feedURL string, keep int) error {
+	// A write transaction fsyncs even when it deletes nothing.
+	var over bool
+	if err := s.db.View(func(tx *bolt.Tx) error {
+		feed := tx.Bucket(bucketSeen).Bucket([]byte(feedURL))
+		over = feed != nil && feed.Stats().KeyN > keep
+		return nil
+	}); err != nil {
+		return fmt.Errorf("count seen entries: %w", err)
+	}
+	if !over {
+		return nil
+	}
+
 	err := s.db.Update(func(tx *bolt.Tx) error {
 		feed := tx.Bucket(bucketSeen).Bucket([]byte(feedURL))
 		if feed == nil {
@@ -308,6 +321,7 @@ func (s *Store) TrimSeen(feedURL string, keep int) error {
 		}); err != nil {
 			return fmt.Errorf("iterate seen entries: %w", err)
 		}
+		// The count was taken in an earlier transaction.
 		if len(entries) <= keep {
 			return nil
 		}
