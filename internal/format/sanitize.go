@@ -19,6 +19,9 @@ var (
 
 	// Runs of blank lines, collapsed to a single paragraph break.
 	reNewlineRuns = regexp.MustCompile(`\n{2,}`)
+
+	// Word spacing left dangling at a line end by a following break.
+	reLineEndSpace = regexp.MustCompile(` +\n`)
 )
 
 // Telegram HTML-mode inline tags to keep. Everything else is stripped.
@@ -193,6 +196,10 @@ func (s *sanitizer) startTag(z *xhtml.Tokenizer, name string, hasAttr, isStart b
 	case !allowedTags[name]:
 	case name == "a":
 		s.openAnchor(z, hasAttr)
+	case name == "pre":
+		s.queueBreak("\n\n")
+		s.writeOpen("<pre>")
+		s.open = append(s.open, name)
 	default:
 		s.writeOpen("<" + name + ">")
 		s.open = append(s.open, name)
@@ -249,6 +256,9 @@ func (s *sanitizer) endTag(name string) {
 	case !allowedTags[name]:
 	case name == "a" && s.dropped > 0:
 		s.dropped--
+	case name == "pre":
+		s.closeInnermost(name)
+		s.queueBreak("\n\n")
 	default:
 		s.closeInnermost(name)
 	}
@@ -271,8 +281,9 @@ func (s *sanitizer) finish() string {
 	out = reAnchorPad.ReplaceAllString(out, "$1$2")
 
 	// Removed tags leave stray blank-line runs; collapse and trim them.
+	out = reLineEndSpace.ReplaceAllString(out, "\n")
 	out = reNewlineRuns.ReplaceAllString(out, "\n\n")
-	return strings.Trim(out, "\n")
+	return strings.TrimLeft(strings.TrimRight(out, " \n"), "\n")
 }
 
 // anchorHref returns the tag's href re-escaped, or empty if absent or unsafe.
