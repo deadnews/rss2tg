@@ -18,6 +18,11 @@ var (
 	// preview.redd.it serves signed WebP Telegram can't fetch;
 	// i.redd.it serves the same media unsigned.
 	reRedditPreviewImg = regexp.MustCompile(`^https?://preview\.redd\.it/([^?]+)`)
+
+	// A sanitized code block, never nested in another one.
+	rePreBlock = regexp.MustCompile(`(?s)<pre>.*?</pre>`)
+
+	dropCodeTags = strings.NewReplacer("<pre>", "", "</pre>", "", "<code>", "", "</code>", "")
 )
 
 // Link formats an entry as a bold title + URL;
@@ -90,7 +95,7 @@ func Quote(item *gofeed.Item) string {
 		writeBoldTitle(&b, item.Title, item.Link)
 	}
 
-	if body := stripBlockquotes(entryBody(item)); body != "" {
+	if body := inlineCodeBlocks(stripBlockquotes(entryBody(item))); body != "" {
 		if b.Len() > 0 {
 			b.WriteString("\n")
 		}
@@ -113,6 +118,14 @@ func stripBlockquotes(s string) string {
 	s = strings.ReplaceAll(s, "<blockquote>", "")
 	s = strings.ReplaceAll(s, "</blockquote>", "")
 	return s
+}
+
+// inlineCodeBlocks folds code blocks into inline <code>, since a <pre> splits
+// the enclosing blockquote into separately collapsible pieces.
+func inlineCodeBlocks(s string) string {
+	return rePreBlock.ReplaceAllStringFunc(s, func(block string) string {
+		return "<code>" + dropCodeTags.Replace(block) + "</code>"
+	})
 }
 
 // writeBoldTitle writes `<a href="LINK"><b>TITLE</b></a>`, or `<b>TITLE</b>` if link is empty.

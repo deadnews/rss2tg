@@ -229,6 +229,18 @@ func TestQuote(t *testing.T) {
 		assert.Contains(t, got, "before inner quote after")
 	})
 
+	t.Run("folds code blocks into inline code", func(t *testing.T) {
+		item := &gofeed.Item{
+			Title:   "Release",
+			Content: "<p>Install:</p><pre><code>\n  $ pip install x\n</code></pre><p>Run:</p><pre>\n  $ x --help\n</pre>",
+		}
+		got := Quote(item)
+		assert.NotContains(t, got, "<pre>")
+		assert.Contains(t, got, "Install:\n\n<code>  $ pip install x\n</code>")
+		assert.Contains(t, got, "Run:\n\n<code>  $ x --help\n</code>")
+		assert.Equal(t, 1, strings.Count(got, "<blockquote"))
+	})
+
 	t.Run("omits blockquote when body is empty", func(t *testing.T) {
 		item := &gofeed.Item{Title: "no body", Link: "https://example.com"}
 		got := Quote(item)
