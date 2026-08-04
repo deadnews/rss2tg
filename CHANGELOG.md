@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.2.1](https://github.com/deadnews/rss2tg/compare/v0.2.0...v0.2.1) - 2026-08-04
+
+### Bug fixes
+
+- _(format)_ break `<pre>` blocks from surrounding text - ([d3d0682](https://github.com/deadnews/rss2tg/commit/d3d0682248ec5ddf3cf78e71311df19b1c81f819))
+- _(format)_ fold `<pre>` into inline `<code>` in quote mode - ([46e394e](https://github.com/deadnews/rss2tg/commit/46e394e340130a41cff5db1e965bac2faed0ec90))
+- _(format)_ keep indentation inside `<pre>` blocks - ([39d96ac](https://github.com/deadnews/rss2tg/commit/39d96ac79092c7cc00b9a4374a9951c3b07d1a92))
+- _(format)_ close tags the excerpt line limit cuts through - ([7255df5](https://github.com/deadnews/rss2tg/commit/7255df5b6bb3f8219d7a4214b93ae39271476c5c))
+
+### Refactor
+
+- _(command)_ pass the command chat scope as one value - ([f5f7f1f](https://github.com/deadnews/rss2tg/commit/f5f7f1fc1703e7bf1cf2d70992567378710b4069))
+- _(command)_ share `resolveFeedURL` between `/sub` and `/unsub` - ([3305889](https://github.com/deadnews/rss2tg/commit/330588922fb9d5619138b56565e57a2e41bd692c))
+- _(format)_ sanitize via `x/net/html` tokenizer instead of regexes - ([939e00f](https://github.com/deadnews/rss2tg/commit/939e00f67165456eec7aafedbf49e6c63cfed111))
+- _(store)_ scan chat topics with a cursor seek - ([78619cd](https://github.com/deadnews/rss2tg/commit/78619cdaf321acc7c59d025e817dc332fa56b215))
+
+### Performance
+
+- _(store)_ skip the write transaction when nothing to trim - ([78278eb](https://github.com/deadnews/rss2tg/commit/78278ebd650d7ff8940f7257c9e2f3b5d1578571))
+
+### Chores
+
+- _(docker)_ run as a numeric uid - ([9fa1046](https://github.com/deadnews/rss2tg/commit/9fa10467538f2d46e48a0e9e6c46fca78cfa9efa))
+- _(make)_ add `alpha` target for pre-release tags - ([5285217](https://github.com/deadnews/rss2tg/commit/5285217a5cc5107b491c1e3f33cdb53532f6f892))
+
 ## [0.2.0](https://github.com/deadnews/rss2tg/compare/v0.1.0...v0.2.0) - 2026-07-20
 
 ### Features
