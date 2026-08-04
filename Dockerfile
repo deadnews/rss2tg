@@ -26,9 +26,9 @@ FROM gcr.io/distroless/static@sha256:9197324ba51d9cd071af8505989365c006adf9d6d20
 COPY --from=ghcr.io/tarampampam/microcheck:1.4.0@sha256:c9f79cd408626de7c10f2d487d67339f49adf0ba61dde96ede65343269db1f85 /bin/pidcheck /bin/pidcheck
 
 COPY --from=builder /bin/rss2tg /bin/rss2tg
-COPY --from=builder --chown=nonroot:nonroot /data /data
+COPY --from=builder --chown=65532:65532 /data /data
 
-USER nonroot:nonroot
+USER 65532:65532
 HEALTHCHECK NONE
 VOLUME /data
 
