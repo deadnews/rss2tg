@@ -27,7 +27,7 @@ func (bot *Bot) checkFeeds(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		feed, err := bot.parseFeed(ctx, url)
+		feed, err := bot.parseFeed(ctx, url, wantsLatest(chats))
 		if err != nil {
 			slog.Error("Failed to parse feed", "url", url, "error", err)
 			continue
@@ -38,6 +38,11 @@ func (bot *Bot) checkFeeds(ctx context.Context) {
 			slog.Error("Failed to trim seen", "url", url, "error", err)
 		}
 	}
+}
+
+// wantsLatest reports whether every subscriber asked for just the latest release.
+func wantsLatest(chats []store.ChatFeed) bool {
+	return !slices.ContainsFunc(chats, func(cf store.ChatFeed) bool { return !cf.Latest })
 }
 
 // entry is one feed item prepared for delivery.

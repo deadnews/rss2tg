@@ -727,11 +727,12 @@ func TestParseSubArgs(t *testing.T) {
 		},
 		{
 			name: "all options any order",
-			args: []string{"include:go,rust", "shorts", "nolive", "exclude:Crypto,AI", "pw"},
+			args: []string{"include:go,rust", "shorts", "nolive", "latest", "exclude:Crypto,AI", "pw"},
 			want: parsedSubArgs{
 				format:  "pw",
 				shorts:  true,
 				noLive:  true,
+				latest:  true,
 				exclude: []string{"crypto", "ai"},
 				include: []string{"go", "rust"},
 			},
@@ -778,6 +779,33 @@ func TestHandleSubWithFilters(t *testing.T) {
 	require.Len(t, subs, 1)
 	assert.Equal(t, []string{"crypto", "ai"}, subs[0].Exclude)
 	assert.Equal(t, []string{"go"}, subs[0].Include)
+}
+
+func TestHandleSubLatestRoundTrips(t *testing.T) {
+	tb := newTestCmdBot(t)
+	feedURL := tb.ts.URL + "/cmd.xml"
+
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 100},
+		Text: "/sub " + feedURL + " latest",
+	})
+
+	subs, err := tb.store.ListSubs(100, 0)
+	require.NoError(t, err)
+	require.Len(t, subs, 1)
+	assert.True(t, subs[0].Latest)
+
+	tb.resetSent()
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 100},
+		Text: "/list",
+	})
+
+	sent := tb.getSent()
+	require.Len(t, sent, 1)
+	assert.Contains(t, sent[0].Text, "<code>/sub "+feedURL+" link latest</code>")
 }
 
 func TestHandleSubResubReplies(t *testing.T) {

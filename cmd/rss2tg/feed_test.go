@@ -267,7 +267,7 @@ func TestSubscribeFeedSendsOnlyLatest(t *testing.T) {
 	tb.serveXML("/seed.xml", []byte(rss))
 
 	feedURL := tb.ts.URL + "/seed.xml"
-	feed, err := tb.bot.parseFeed(t.Context(), feedURL)
+	feed, err := tb.bot.parseFeed(t.Context(), feedURL, false)
 	require.NoError(t, err)
 	chat := store.ChatFeed{ChatID: 100, Sub: store.Sub{Format: "link"}}
 	tb.bot.deliverInitialEntries(t.Context(), feedURL, feed, &chat, []store.ChatFeed{chat})
@@ -295,7 +295,7 @@ func TestSubscribeInitialSendSkipsFilteredEntries(t *testing.T) {
 	tb.serveXML("/seed.xml", []byte(rss))
 
 	feedURL := tb.ts.URL + "/seed.xml"
-	feed, err := tb.bot.parseFeed(t.Context(), feedURL)
+	feed, err := tb.bot.parseFeed(t.Context(), feedURL, false)
 	require.NoError(t, err)
 	chat := store.ChatFeed{ChatID: 100, Sub: store.Sub{Format: "link", Exclude: []string{"skip"}}}
 	tb.bot.deliverInitialEntries(t.Context(), feedURL, feed, &chat, []store.ChatFeed{chat})
@@ -353,6 +353,34 @@ func TestCheckFeedsRetriesTransientFailure(t *testing.T) {
 		seen, err := tb.store.IsSeen(feedURL, guid)
 		require.NoError(t, err)
 		assert.False(t, seen, "transient-failed guid %s must not be marked seen", guid)
+	}
+}
+
+func TestWantsLatest(t *testing.T) {
+	tests := []struct {
+		name  string
+		chats []store.ChatFeed
+		want  bool
+	}{
+		{
+			name:  "default subscriber",
+			chats: []store.ChatFeed{{Sub: store.Sub{}}},
+		},
+		{
+			name:  "every subscriber asked for latest",
+			chats: []store.ChatFeed{{Sub: store.Sub{Latest: true}}, {Sub: store.Sub{Latest: true}}},
+			want:  true,
+		},
+		{
+			name:  "one subscriber wants the whole feed",
+			chats: []store.ChatFeed{{Sub: store.Sub{Latest: true}}, {Sub: store.Sub{}}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, wantsLatest(tt.chats))
+		})
 	}
 }
 
