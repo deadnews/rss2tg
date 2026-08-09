@@ -30,6 +30,7 @@ type Sub struct {
 	Format  string   `json:"format"`
 	Shorts  bool     `json:"shorts,omitempty"`
 	NoLive  bool     `json:"nolive,omitempty"`
+	Latest  bool     `json:"latest,omitempty"`
 	Exclude []string `json:"exclude,omitempty"`
 	Include []string `json:"include,omitempty"`
 }

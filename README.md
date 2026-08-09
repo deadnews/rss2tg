@@ -34,17 +34,17 @@ See [`compose.dev.yml`](compose.dev.yml) for a Compose reference.
 
 ## Commands
 
-| Command                                                                                | Description                    |
-| -------------------------------------------------------------------------------------- | ------------------------------ |
-| `/sub <url> [link\|pw\|text\|quote] [shorts] [nolive] [exclude:w1,w2] [include:w1,w2]` | Subscribe current chat to feed |
-| `/unsub <url>`                                                                         | Unsubscribe from feed          |
-| `/list`                                                                                | List subscriptions             |
-| `/help`                                                                                | Show available commands        |
+| Command                                                                                         | Description                    |
+| ----------------------------------------------------------------------------------------------- | ------------------------------ |
+| `/sub <url> [link\|pw\|text\|quote] [shorts] [nolive] [latest] [exclude:w1,w2] [include:w1,w2]` | Subscribe current chat to feed |
+| `/unsub <url>`                                                                                  | Unsubscribe from feed          |
+| `/list`                                                                                         | List subscriptions             |
+| `/help`                                                                                         | Show available commands        |
 
 ```text
-/sub https://github.com/moby/moby exclude:alpha,beta,rc
-/sub https://reddit.com/r/programming/.rss include:go,rust
-/sub https://example.com/feed.xml pw
+/sub https://github.com/moby/moby latest
+/sub https://deadnews.github.io/rss-feeds/hackernews-top20.xml
+/sub https://reddit.com/r/programming/.rss include:go,rust exclude:java
 ```
 
 - New subscribers receive the 3 latest entries accepted by their filters;
@@ -63,6 +63,7 @@ See [`compose.dev.yml`](compose.dev.yml) for a Compose reference.
   - Without `RSS2TG_YOUTUBE_KEY`, messages are sent without
     duration and live metadata; `nolive` has no effect.
 - GitHub repo URLs auto-resolve to their releases Atom feed.
+  - Append `latest` to send only the release labeled Latest.
 
 ## Message Formats
 

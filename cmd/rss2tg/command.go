@@ -37,7 +37,7 @@ var validFormats = map[string]bool{
 
 const helpText = `<b>Available commands:</b>
 
-<code>/sub &lt;url&gt; [link|pw|text|quote] [shorts] [nolive] [exclude:w1,w2] [include:w1,w2]</code> — subscribe to feed
+<code>/sub &lt;url&gt; [link|pw|text|quote] [shorts] [nolive] [latest] [exclude:w1,w2] [include:w1,w2]</code> — subscribe to feed
 <code>/unsub &lt;url&gt;</code> — unsubscribe from feed
 <code>/list</code> — list subscriptions
 <code>/help</code> — show this message
@@ -46,6 +46,8 @@ const helpText = `<b>Available commands:</b>
 • YouTube channel URLs auto-resolve to their Atom feed.
 • Shorts are filtered by default — add <code>shorts</code> to include them.
 • Live streams are included by default — add <code>nolive</code> to filter them out.
+• GitHub repo URLs auto-resolve to their releases Atom feed.
+• Add <code>latest</code> to send only releases labeled latest.
 
 <b>Filters</b>
 • Match anywhere in the title, case-insensitively; exclude wins over include.
@@ -119,7 +121,7 @@ func (bot *Bot) authorized(ctx context.Context, msg *telegram.Message) bool {
 }
 
 const (
-	subUsage   = "Usage: /sub &lt;url&gt; [link|pw|text|quote] [shorts] [nolive] [exclude:w1,w2] [include:w1,w2]"
+	subUsage   = "Usage: /sub &lt;url&gt; [link|pw|text|quote] [shorts] [nolive] [latest] [exclude:w1,w2] [include:w1,w2]"
 	unsubUsage = "Usage: /unsub &lt;url&gt;"
 )
 
@@ -133,6 +135,7 @@ type parsedSubArgs struct {
 	format  string
 	shorts  bool
 	noLive  bool
+	latest  bool
 	exclude []string
 	include []string
 }
@@ -146,6 +149,8 @@ func parseSubArgs(args []string) (parsedSubArgs, bool) {
 			out.shorts = true
 		case arg == "nolive":
 			out.noLive = true
+		case arg == "latest":
+			out.latest = true
 		case validFormats[arg]:
 			out.format = arg
 		case strings.HasPrefix(arg, prefixExclude):
@@ -186,7 +191,7 @@ func (bot *Bot) handleSub(ctx context.Context, s scope, args []string) {
 		return
 	}
 
-	feed, err := bot.parseFeed(ctx, url)
+	feed, err := bot.parseFeed(ctx, url, opts.latest)
 	if err != nil {
 		slog.Error("Failed to parse feed", "url", url, "error", err)
 		bot.reply(ctx, s, "Failed to subscribe.")
@@ -208,6 +213,7 @@ func (bot *Bot) handleSub(ctx context.Context, s scope, args []string) {
 		Format:  opts.format,
 		Shorts:  opts.shorts,
 		NoLive:  opts.noLive,
+		Latest:  opts.latest,
 		Exclude: opts.exclude,
 		Include: opts.include,
 	}
@@ -416,11 +422,11 @@ func (bot *Bot) chatLabel(ctx context.Context, cache map[int64]string, chatID in
 
 // resolveFeedURL derives the stored key /sub and /unsub must agree on.
 func resolveFeedURL(ctx context.Context, raw string) (string, error) {
-	url, err := youtube.ResolveURL(ctx, github.FeedURL(raw))
+	url, err := youtube.ResolveURL(ctx, raw)
 	if err != nil {
 		return "", fmt.Errorf("resolve feed URL: %w", err)
 	}
-	return normalizeURL(url), nil
+	return normalizeURL(github.FeedURL(url)), nil
 }
 
 // normalizeURL trims trailing slashes so a feed and its slash variant are one sub.
@@ -452,6 +458,9 @@ func formatSubCommand(sub *store.Sub) string {
 	}
 	if sub.NoLive {
 		b.WriteString(" nolive")
+	}
+	if sub.Latest {
+		b.WriteString(" latest")
 	}
 	if len(sub.Exclude) > 0 {
 		b.WriteString(" exclude:")

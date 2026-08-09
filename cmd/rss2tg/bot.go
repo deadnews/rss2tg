@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/mmcdole/gofeed"
 
+	"github.com/deadnews/rss2tg/internal/github"
 	"github.com/deadnews/rss2tg/internal/store"
 	"github.com/deadnews/rss2tg/internal/telegram"
 )
@@ -41,13 +43,37 @@ func NewBot(cfg *Config, tg *telegram.Client, st *store.Store) *Bot {
 	}
 }
 
-// parseFeed fetches and parses a feed.
-func (bot *Bot) parseFeed(ctx context.Context, url string) (*gofeed.Feed, error) {
+// parseFeed fetches and parses a feed,
+// reducing a GitHub releases feed to its latest release when asked.
+func (bot *Bot) parseFeed(ctx context.Context, url string, latestOnly bool) (*gofeed.Feed, error) {
 	feed, err := bot.parser.ParseURLWithContext(url, ctx)
 	if err != nil {
 		return nil, fmt.Errorf("parse feed: %w", err)
 	}
+
+	latestURL, ok := github.LatestURL(url)
+	if !latestOnly || !ok {
+		return feed, nil
+	}
+	// Reducing before delivery keeps an unlabeled entry unseen,
+	// so a later promotion still sends it.
+	if err := keepLatestRelease(ctx, feed, latestURL); err != nil {
+		return nil, err
+	}
 	return feed, nil
+}
+
+// keepLatestRelease drops every entry but the release labeled latest.
+func keepLatestRelease(ctx context.Context, feed *gofeed.Feed, latestURL string) error {
+	link, err := github.ResolveLatest(ctx, latestURL)
+	if err != nil {
+		return fmt.Errorf("resolve latest release: %w", err)
+	}
+	feed.Items = slices.DeleteFunc(feed.Items, func(item *gofeed.Item) bool { return item.Link != link })
+	if link != "" && len(feed.Items) == 0 {
+		slog.Warn("Latest release is outside the feed window", "url", latestURL, "link", link)
+	}
+	return nil
 }
 
 // Run validates the bot token and runs the feed-check and update-polling loops.
