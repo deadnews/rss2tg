@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.0](https://github.com/deadnews/rss2tg/compare/v0.2.1...v0.3.0) - 2026-08-22
+
+### Features
+
+- _(github)_ add `latest` flag to send only the latest release ([#7](https://github.com/deadnews/rss2tg/issues/7)) - ([d99e827](https://github.com/deadnews/rss2tg/commit/d99e8278759097e34c2c625d328e22ab3aa50726))
+
+### Dependencies
+
+- update to `go:1.27` - ([a13d34c](https://github.com/deadnews/rss2tg/commit/a13d34cae3102791b6c76ab270870927aaa3b62c))
+
 ## [0.2.1](https://github.com/deadnews/rss2tg/compare/v0.2.0...v0.2.1) - 2026-08-04
 
 ### Bug fixes
