@@ -269,7 +269,7 @@ func TestSubscribeFeedSendsOnlyLatest(t *testing.T) {
 	feedURL := tb.ts.URL + "/seed.xml"
 	feed, err := tb.bot.parseFeed(t.Context(), feedURL, false)
 	require.NoError(t, err)
-	chat := store.ChatFeed{ChatID: 100, Sub: store.Sub{Format: "link"}}
+	chat := store.ChatFeed{ChatID: 100, Format: "link"}
 	tb.bot.deliverInitialEntries(t.Context(), feedURL, feed, &chat, []store.ChatFeed{chat})
 
 	assert.Len(t, tb.getSent(), initialSendLimit)
@@ -297,7 +297,7 @@ func TestSubscribeInitialSendSkipsFilteredEntries(t *testing.T) {
 	feedURL := tb.ts.URL + "/seed.xml"
 	feed, err := tb.bot.parseFeed(t.Context(), feedURL, false)
 	require.NoError(t, err)
-	chat := store.ChatFeed{ChatID: 100, Sub: store.Sub{Format: "link", Exclude: []string{"skip"}}}
+	chat := store.ChatFeed{ChatID: 100, Format: "link", Exclude: []string{"skip"}}
 	tb.bot.deliverInitialEntries(t.Context(), feedURL, feed, &chat, []store.ChatFeed{chat})
 
 	sent := tb.getSent()
@@ -368,12 +368,12 @@ func TestWantsLatest(t *testing.T) {
 		},
 		{
 			name:  "every subscriber asked for latest",
-			chats: []store.ChatFeed{{Sub: store.Sub{Latest: true}}, {Sub: store.Sub{Latest: true}}},
+			chats: []store.ChatFeed{{Latest: true}, {Latest: true}},
 			want:  true,
 		},
 		{
 			name:  "one subscriber wants the whole feed",
-			chats: []store.ChatFeed{{Sub: store.Sub{Latest: true}}, {Sub: store.Sub{}}},
+			chats: []store.ChatFeed{{Latest: true}, {Sub: store.Sub{}}},
 		},
 	}
 
