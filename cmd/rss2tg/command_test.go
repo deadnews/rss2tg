@@ -2,9 +2,7 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -826,45 +824,36 @@ func TestHandleSubResubReplies(t *testing.T) {
 	assert.Contains(t, sent[1].Text, "Updated subscription for")
 }
 
-func TestHandleSubResubSkipsDelivery(t *testing.T) {
-	const item3 = `<item><title>Post Three</title><link>https://example.com/3</link><guid>guid-3</guid></item>`
-
-	var feedXML atomic.Pointer[string]
-	rss := testRSS
-	feedXML.Store(&rss)
+func TestHandleSubResubCapsBacklog(t *testing.T) {
+	const rss = `<?xml version="1.0"?>
+<rss version="2.0"><channel><title>T</title>
+<item><title>P1</title><link>https://e.com/1</link><guid>1</guid></item>
+<item><title>P2</title><link>https://e.com/2</link><guid>2</guid></item>
+<item><title>P3</title><link>https://e.com/3</link><guid>3</guid></item>
+<item><title>P4</title><link>https://e.com/4</link><guid>4</guid></item>
+<item><title>P5</title><link>https://e.com/5</link><guid>5</guid></item>
+</channel></rss>`
 
 	tb := newTestBotEnv(t)
-	tb.mux.HandleFunc("/mut.xml", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/xml")
-		_, _ = w.Write([]byte(*feedXML.Load()))
-	})
-	feedURL := tb.ts.URL + "/mut.xml"
+	tb.serveXML("/feed.xml", []byte(rss))
+	feedURL := tb.ts.URL + "/feed.xml"
+
+	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: feedURL, Format: "link", Latest: true})
+	require.NoError(t, err)
 
 	tb.bot.handleCommand(t.Context(), &telegram.Message{
 		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 100},
 		Text: "/sub " + feedURL,
 	})
-	require.Len(t, tb.getSent(), 3, "reply plus both entries on first subscribe")
-
-	extended := strings.Replace(testRSS, "<item>", item3+"<item>", 1)
-	feedXML.Store(&extended)
-	tb.resetSent()
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/sub " + feedURL + " pw",
-	})
 
 	sent := tb.getSent()
-	require.Len(t, sent, 1, "update must reply without delivering entries")
+	require.Len(t, sent, 1+initialSendLimit, "reply plus the capped backlog")
 	assert.Contains(t, sent[0].Text, "Updated subscription")
 
 	tb.resetSent()
 	tb.bot.checkFeeds(t.Context())
-	sent = tb.getSent()
-	require.Len(t, sent, 1, "next poll cycle delivers the new entry")
-	assert.Contains(t, sent[0].Text, "https://example.com/3")
+	assert.Empty(t, tb.getSent(), "the rest of the backlog is marked seen")
 }
 
 func TestHandleListRendersFilters(t *testing.T) {

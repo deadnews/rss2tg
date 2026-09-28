@@ -224,22 +224,22 @@ func (bot *Bot) handleSub(ctx context.Context, s scope, args []string) {
 		return
 	}
 
-	// An update only changes options; new entries wait for the next poll cycle.
+	verb := "Subscribed to"
 	if existed {
-		bot.reply(ctx, s, fmt.Sprintf("Updated subscription for %s (%s)", html.EscapeString(url), sub.Format))
-		return
+		verb = "Updated subscription for"
 	}
-	bot.reply(ctx, s, fmt.Sprintf("Subscribed to %s (%s)", html.EscapeString(url), sub.Format))
+	bot.reply(ctx, s, fmt.Sprintf("%s %s (%s)", verb, html.EscapeString(url), sub.Format))
 
 	// Deliver to every chat subscribed to the URL.
-	newChat := sub.ChatFeed(s.chatID, s.threadID)
-	chats := []store.ChatFeed{newChat}
+	// Updates are capped like new subs: dropping latest exposes held-back releases.
+	cf := sub.ChatFeed(s.chatID, s.threadID)
+	chats := []store.ChatFeed{cf}
 	if feeds, err := bot.store.AllFeeds(); err == nil {
 		chats = feeds[url]
 	} else {
 		slog.Error("Failed to get feeds", "error", err)
 	}
-	bot.deliverInitialEntries(ctx, url, feed, &newChat, chats)
+	bot.deliverInitialEntries(ctx, url, feed, &cf, chats)
 }
 
 // forumTopicFor returns the feed's existing topic or creates one named after it.
@@ -275,12 +275,12 @@ func (bot *Bot) clearTopicCreationPin(ctx context.Context, msg *telegram.Message
 	}
 }
 
-// deliverInitialEntries delivers the newest initialSendLimit entries the new
+// deliverInitialEntries delivers the newest initialSendLimit entries the
 // subscriber's filters accept and marks the rest seen, to avoid flooding.
-func (bot *Bot) deliverInitialEntries(ctx context.Context, feedURL string, feed *gofeed.Feed, newChat *store.ChatFeed, chats []store.ChatFeed) {
+func (bot *Bot) deliverInitialEntries(ctx context.Context, feedURL string, feed *gofeed.Feed, chat *store.ChatFeed, chats []store.ChatFeed) {
 	remaining := initialSendLimit
 	for _, item := range feed.Items {
-		if remaining > 0 && accepts(item, newChat) {
+		if remaining > 0 && accepts(item, chat) {
 			remaining--
 			continue
 		}
