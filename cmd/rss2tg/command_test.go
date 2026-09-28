@@ -30,6 +30,16 @@ func newTestCmdBot(t *testing.T) *testBotEnv {
 	return env
 }
 
+// command runs text as the manager in a plain group chat.
+func (tb *testBotEnv) command(t *testing.T, text string) {
+	t.Helper()
+	tb.bot.handleCommand(t.Context(), &telegram.Message{
+		From: &telegram.User{ID: 42},
+		Chat: telegram.Chat{ID: 100},
+		Text: text,
+	})
+}
+
 func TestHandleCommandUnauthorized(t *testing.T) {
 	tb := newTestCmdBot(t)
 
@@ -83,11 +93,7 @@ func TestHandleCommandChannelPostAdminCheckFails(t *testing.T) {
 func TestHandleHelp(t *testing.T) {
 	tb := newTestCmdBot(t)
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/help",
-	})
+	tb.command(t, "/help")
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
@@ -97,11 +103,7 @@ func TestHandleHelp(t *testing.T) {
 func TestHandleStart(t *testing.T) {
 	tb := newTestCmdBot(t)
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/start",
-	})
+	tb.command(t, "/start")
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
@@ -111,11 +113,7 @@ func TestHandleStart(t *testing.T) {
 func TestHandleHelpWithBotSuffix(t *testing.T) {
 	tb := newTestCmdBot(t)
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/help@mybot",
-	})
+	tb.command(t, "/help@mybot")
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
@@ -126,11 +124,7 @@ func TestHandleSub(t *testing.T) {
 	tb := newTestCmdBot(t)
 	feedURL := tb.ts.URL + "/cmd.xml"
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/sub " + feedURL,
-	})
+	tb.command(t, "/sub "+feedURL)
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
@@ -152,11 +146,7 @@ func TestHandleSubDeliversInitialEntriesToExistingSubscribers(t *testing.T) {
 	_, err := tb.store.AddSub(200, 0, &store.Sub{URL: feedURL, Format: "link"})
 	require.NoError(t, err)
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/sub " + feedURL,
-	})
+	tb.command(t, "/sub "+feedURL)
 
 	var toExisting []sentMessage
 	for _, msg := range tb.getSent() {
@@ -171,11 +161,7 @@ func TestHandleSubEscapesURL(t *testing.T) {
 	tb := newTestCmdBot(t)
 	feedURL := tb.ts.URL + "/cmd.xml?a=1&b=2"
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/sub " + feedURL,
-	})
+	tb.command(t, "/sub "+feedURL)
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
@@ -264,11 +250,7 @@ func TestHandleSubNonForumSkipsTopic(t *testing.T) {
 	tb := newTestCmdBot(t)
 	feedURL := tb.ts.URL + "/cmd.xml"
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/sub " + feedURL,
-	})
+	tb.command(t, "/sub "+feedURL)
 
 	assert.Empty(t, tb.getTopics())
 	general, err := tb.store.ListSubs(100, 0)
@@ -298,17 +280,9 @@ func TestHandleListShowsTitle(t *testing.T) {
 	tb := newTestCmdBot(t)
 	feedURL := tb.ts.URL + "/cmd.xml"
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/sub " + feedURL,
-	})
+	tb.command(t, "/sub "+feedURL)
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/list",
-	})
+	tb.command(t, "/list")
 
 	sent := tb.getSent()
 	require.GreaterOrEqual(t, len(sent), 2)
@@ -321,11 +295,7 @@ func TestHandleSubWithFormat(t *testing.T) {
 	tb := newTestCmdBot(t)
 	feedURL := tb.ts.URL + "/cmd.xml"
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/sub " + feedURL + " pw",
-	})
+	tb.command(t, "/sub "+feedURL+" pw")
 
 	require.Len(t, tb.getSent(), 1)
 
@@ -339,11 +309,7 @@ func TestHandleSubWithFormat(t *testing.T) {
 func TestHandleSubNoArgs(t *testing.T) {
 	tb := newTestCmdBot(t)
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/sub",
-	})
+	tb.command(t, "/sub")
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
@@ -353,11 +319,7 @@ func TestHandleSubNoArgs(t *testing.T) {
 func TestHandleSubInvalidFormat(t *testing.T) {
 	tb := newTestCmdBot(t)
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/sub " + tb.ts.URL + "/cmd.xml nope",
-	})
+	tb.command(t, "/sub "+tb.ts.URL+"/cmd.xml nope")
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
@@ -371,11 +333,7 @@ func TestHandleSubInvalidFormat(t *testing.T) {
 func TestHandleSubInvalidFeed(t *testing.T) {
 	tb := newTestCmdBot(t)
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/sub " + tb.ts.URL + "/missing.xml",
-	})
+	tb.command(t, "/sub "+tb.ts.URL+"/missing.xml")
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
@@ -392,11 +350,7 @@ func TestHandleUnsub(t *testing.T) {
 	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: "https://example.com/feed.xml", Format: "link"})
 	require.NoError(t, err)
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/unsub https://example.com/feed.xml",
-	})
+	tb.command(t, "/unsub https://example.com/feed.xml")
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
@@ -428,11 +382,7 @@ func TestHandleUnsubFromForumGeneralRemovesTopicSub(t *testing.T) {
 func TestHandleUnsubEscapesURL(t *testing.T) {
 	tb := newTestCmdBot(t)
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/unsub https://example.com/feed?a=1&b=2",
-	})
+	tb.command(t, "/unsub https://example.com/feed?a=1&b=2")
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
@@ -442,11 +392,7 @@ func TestHandleUnsubEscapesURL(t *testing.T) {
 func TestHandleUnsubNotFound(t *testing.T) {
 	tb := newTestCmdBot(t)
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/unsub https://example.com/nope.xml",
-	})
+	tb.command(t, "/unsub https://example.com/nope.xml")
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
@@ -456,11 +402,7 @@ func TestHandleUnsubNotFound(t *testing.T) {
 func TestHandleUnsubNoArgs(t *testing.T) {
 	tb := newTestCmdBot(t)
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/unsub",
-	})
+	tb.command(t, "/unsub")
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
@@ -475,11 +417,7 @@ func TestHandleList(t *testing.T) {
 	_, err = tb.store.AddSub(100, 0, &store.Sub{URL: "https://b.com/feed", Format: "pw"})
 	require.NoError(t, err)
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/list",
-	})
+	tb.command(t, "/list")
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
@@ -612,11 +550,7 @@ func TestHandleListInPrivateEmpty(t *testing.T) {
 func TestHandleListEmpty(t *testing.T) {
 	tb := newTestCmdBot(t)
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/list",
-	})
+	tb.command(t, "/list")
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
@@ -627,16 +561,8 @@ func TestHandleSubNormalizesTrailingSlash(t *testing.T) {
 	tb := newTestCmdBot(t)
 	feedURL := tb.ts.URL + "/cmd.xml"
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/sub " + feedURL,
-	})
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/sub " + feedURL + "/ pw",
-	})
+	tb.command(t, "/sub "+feedURL)
+	tb.command(t, "/sub "+feedURL+"/ pw")
 
 	subs, err := tb.store.ListSubs(100, 0)
 	require.NoError(t, err)
@@ -762,11 +688,7 @@ func TestHandleSubWithFilters(t *testing.T) {
 	tb := newTestCmdBot(t)
 	feedURL := tb.ts.URL + "/cmd.xml"
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/sub " + feedURL + " pw exclude:crypto,ai include:go",
-	})
+	tb.command(t, "/sub "+feedURL+" pw exclude:crypto,ai include:go")
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
@@ -783,11 +705,7 @@ func TestHandleSubLatestRoundTrips(t *testing.T) {
 	tb := newTestCmdBot(t)
 	feedURL := tb.ts.URL + "/cmd.xml"
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/sub " + feedURL + " latest",
-	})
+	tb.command(t, "/sub "+feedURL+" latest")
 
 	subs, err := tb.store.ListSubs(100, 0)
 	require.NoError(t, err)
@@ -795,11 +713,7 @@ func TestHandleSubLatestRoundTrips(t *testing.T) {
 	assert.True(t, subs[0].Latest)
 
 	tb.resetSent()
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/list",
-	})
+	tb.command(t, "/list")
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
@@ -811,11 +725,7 @@ func TestHandleSubResubReplies(t *testing.T) {
 	feedURL := tb.ts.URL + "/cmd.xml"
 
 	for range 2 {
-		tb.bot.handleCommand(t.Context(), &telegram.Message{
-			From: &telegram.User{ID: 42},
-			Chat: telegram.Chat{ID: 100},
-			Text: "/sub " + feedURL,
-		})
+		tb.command(t, "/sub "+feedURL)
 	}
 
 	sent := tb.getSent()
@@ -841,11 +751,7 @@ func TestHandleSubResubCapsBacklog(t *testing.T) {
 	_, err := tb.store.AddSub(100, 0, &store.Sub{URL: feedURL, Format: "link", Latest: true})
 	require.NoError(t, err)
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/sub " + feedURL,
-	})
+	tb.command(t, "/sub "+feedURL)
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1+initialSendLimit, "reply plus the capped backlog")
@@ -870,11 +776,7 @@ func TestHandleListRendersFilters(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tb.bot.handleCommand(t.Context(), &telegram.Message{
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 100},
-		Text: "/list",
-	})
+	tb.command(t, "/list")
 
 	sent := tb.getSent()
 	require.Len(t, sent, 1)
