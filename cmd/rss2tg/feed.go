@@ -98,11 +98,11 @@ func (bot *Bot) deliverEntry(ctx context.Context, e *entry, recipients []*store.
 			continue
 		}
 		err := bot.sendEntry(ctx, e, chat)
-		var apiErr *telegram.APIError
+		_, rejected := errors.AsType[*telegram.APIError](err)
 		switch {
 		case err == nil:
 			delivered = true
-		case errors.As(err, &apiErr):
+		case rejected:
 			slog.Warn("Dropping entry rejected by Telegram",
 				"url", e.url, "guid", e.guid, "chat_id", chat.ChatID, "error", err)
 		default:
