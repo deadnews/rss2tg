@@ -35,10 +35,15 @@ var validFormats = map[string]bool{
 	formatQuote:   true,
 }
 
+const (
+	subSyntax   = "/sub &lt;url&gt; [link|pw|text|quote] [shorts] [nolive] [latest] [exclude:w1,w2] [include:w1,w2]"
+	unsubSyntax = "/unsub &lt;url&gt;"
+)
+
 const helpText = `<b>Available commands:</b>
 
-<code>/sub &lt;url&gt; [link|pw|text|quote] [shorts] [nolive] [latest] [exclude:w1,w2] [include:w1,w2]</code> — subscribe to feed
-<code>/unsub &lt;url&gt;</code> — unsubscribe from feed
+<code>` + subSyntax + `</code> — subscribe to feed
+<code>` + unsubSyntax + `</code> — unsubscribe from feed
 <code>/list</code> — list subscriptions
 <code>/help</code> — show this message
 
@@ -121,8 +126,8 @@ func (bot *Bot) authorized(ctx context.Context, msg *telegram.Message) bool {
 }
 
 const (
-	subUsage   = "Usage: /sub &lt;url&gt; [link|pw|text|quote] [shorts] [nolive] [latest] [exclude:w1,w2] [include:w1,w2]"
-	unsubUsage = "Usage: /unsub &lt;url&gt;"
+	subUsage   = "Usage: " + subSyntax
+	unsubUsage = "Usage: " + unsubSyntax
 )
 
 const (
