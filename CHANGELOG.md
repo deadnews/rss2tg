@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.3.1](https://github.com/deadnews/rss2tg/compare/v0.3.0...v0.3.1) - 2026-09-29
+
+### Bug fixes
+
+- _(command)_ cap delivery when `/sub` updates a subscription - ([ac65081](https://github.com/deadnews/rss2tg/commit/ac65081795e8fda24ef4ab6032ed8eff2d22ab00))
+
+### Refactor
+
+- _(command)_ share command syntax between help and usage - ([843ce53](https://github.com/deadnews/rss2tg/commit/843ce538895d3063c14fdd0f4b19be08c8691bf6))
+- _(feed)_ use `errors.AsType` for telegram rejections - ([a10539d](https://github.com/deadnews/rss2tg/commit/a10539d05cb40de0ce8c9aed04bf9ac985bde82c))
+
+### Testing
+
+- _(command)_ run manager commands through a helper - ([c134df1](https://github.com/deadnews/rss2tg/commit/c134df1f74707335fff9a366dc307bc796022789))
+
+### Chores
+
+- _(make)_ default `tag` to bumped version - ([fd9eff3](https://github.com/deadnews/rss2tg/commit/fd9eff3f87faaf779cebe002b1a13a40f1635404))
+
+### Dependencies
+
+- update deps - ([92c18b4](https://github.com/deadnews/rss2tg/commit/92c18b45fcbbdd4560c293c8da61a0bcaf111004))
+
 ## [0.3.0](https://github.com/deadnews/rss2tg/compare/v0.2.1...v0.3.0) - 2026-08-22
 
 ### Features
