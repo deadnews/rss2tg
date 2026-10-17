@@ -46,7 +46,8 @@ func Link(item *gofeed.Item, meta string) string {
 	return b.String()
 }
 
-// Preview formats an entry with a clickable bold title, sanitized content, and feed attribution.
+// Preview formats an entry with a clickable bold title,
+// sanitized content, and feed attribution.
 func Preview(item *gofeed.Item, feedTitle, feedLink string) string {
 	var b strings.Builder
 	writeBoldTitle(&b, cmp.Or(item.Title, item.Link), item.Link)

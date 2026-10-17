@@ -69,7 +69,9 @@ func keepLatestRelease(ctx context.Context, feed *gofeed.Feed, latestURL string)
 	if err != nil {
 		return fmt.Errorf("resolve latest release: %w", err)
 	}
-	feed.Items = slices.DeleteFunc(feed.Items, func(item *gofeed.Item) bool { return item.Link != link })
+	feed.Items = slices.DeleteFunc(feed.Items, func(item *gofeed.Item) bool {
+		return item.Link != link
+	})
 	if link != "" && len(feed.Items) == 0 {
 		slog.Warn("Latest release is outside the feed window", "url", latestURL, "link", link)
 	}

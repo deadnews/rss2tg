@@ -55,7 +55,8 @@ type entry struct {
 	live bool
 }
 
-// deliverNew sends unseen entries oldest-first; each is marked seen only after at least one chat receives it.
+// deliverNew sends unseen entries oldest-first;
+// each is marked seen only after at least one chat receives it.
 func (bot *Bot) deliverNew(ctx context.Context, feedURL string, feed *gofeed.Feed, chats []store.ChatFeed) {
 	// Feeds list newest-first; reverse so messages appear chronologically in chat.
 	for _, item := range slices.Backward(feed.Items) {
@@ -152,7 +153,8 @@ func (bot *Bot) sendEntry(ctx context.Context, e *entry, chat *store.ChatFeed) e
 		disablePreview = false
 	}
 	text = format.TruncateHTML(text, format.MessageLimit)
-	if err := bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, text, disablePreview); err != nil {
+	err := bot.tg.SendMessage(ctx, chat.ChatID, chat.ThreadID, text, disablePreview)
+	if err != nil {
 		return fmt.Errorf("send entry: %w", err)
 	}
 	return nil

@@ -17,8 +17,10 @@ const (
 )
 
 var client = &http.Client{
-	Timeout:       fetchTimeout,
-	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	Timeout: fetchTimeout,
+	CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
 }
 
 // FeedURL rewrites a GitHub repo, releases, or tags URL to its Atom feed;

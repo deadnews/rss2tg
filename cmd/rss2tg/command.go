@@ -263,10 +263,12 @@ func (bot *Bot) forumTopicFor(ctx context.Context, s scope, feedURL, title strin
 	threadID, err = bot.tg.CreateForumTopic(ctx, s.chatID, name)
 	if err != nil {
 		slog.Error("Failed to create forum topic", "chat_id", s.chatID, "error", err)
-		bot.reply(ctx, s, "Failed to create topic. The bot must be an admin with Manage Topics.")
+		bot.reply(ctx, s,
+			"Failed to create topic. The bot must be an admin with Manage Topics.")
 		return 0, false
 	}
-	// Telegram auto-pins the creation message; it is cleared reactively on the service message.
+	// Telegram auto-pins the creation message;
+	// it is cleared reactively on the service message.
 	bot.reply(ctx, s, fmt.Sprintf("Created topic <b>%s</b>", html.EscapeString(name)))
 	return threadID, true
 }
@@ -274,7 +276,8 @@ func (bot *Bot) forumTopicFor(ctx context.Context, s scope, feedURL, title strin
 // clearTopicCreationPin removes the topic-creation service message
 // that Telegram auto-pins whenever a forum topic is created.
 func (bot *Bot) clearTopicCreationPin(ctx context.Context, msg *telegram.Message) {
-	if err := bot.tg.UnpinAllForumTopicMessages(ctx, msg.Chat.ID, msg.MessageThreadID); err != nil {
+	err := bot.tg.UnpinAllForumTopicMessages(ctx, msg.Chat.ID, msg.MessageThreadID)
+	if err != nil {
 		slog.Warn("Failed to unpin topic creation message",
 			"chat_id", msg.Chat.ID, "thread_id", msg.MessageThreadID, "error", err)
 	}
@@ -388,7 +391,11 @@ func (bot *Bot) listAllSubs(ctx context.Context, s scope) {
 	}
 
 	slices.SortFunc(subs, func(a, b store.ChatFeed) int {
-		return cmp.Or(cmp.Compare(a.ChatID, b.ChatID), cmp.Compare(a.Title, b.Title), cmp.Compare(a.URL, b.URL))
+		return cmp.Or(
+			cmp.Compare(a.ChatID, b.ChatID),
+			cmp.Compare(a.Title, b.Title),
+			cmp.Compare(a.URL, b.URL),
+		)
 	})
 
 	labels := make(map[int64]string)

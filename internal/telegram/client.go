@@ -147,10 +147,11 @@ func (c *Client) CreateForumTopic(ctx context.Context, chatID int64, name string
 
 // UnpinAllForumTopicMessages clears a topic's pinned messages.
 func (c *Client) UnpinAllForumTopicMessages(ctx context.Context, chatID int64, threadID int) error {
-	return c.postWithRetry(ctx, "unpinAllForumTopicMessages", unpinAllForumTopicMessagesRequest{
+	req := unpinAllForumTopicMessagesRequest{
 		ChatID:          chatID,
 		MessageThreadID: threadID,
-	})
+	}
+	return c.postWithRetry(ctx, "unpinAllForumTopicMessages", req)
 }
 
 // APIError is a permanent Telegram rejection.
@@ -212,7 +213,8 @@ func (c *Client) postWithRetry(ctx context.Context, method string, payload any) 
 }
 
 func (c *Client) post(ctx context.Context, method string, body []byte) (*Response[json.RawMessage], error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url(method), bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(
+		ctx, http.MethodPost, c.url(method), bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", method, err)
 	}
