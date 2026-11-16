@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.2](https://github.com/deadnews/rss2tg/compare/v0.3.1...v0.3.2) - 2026-11-16
+
+### Bug fixes
+
+- _(telegram)_ treat 5xx api errors as transient - ([e1522f3](https://github.com/deadnews/rss2tg/commit/e1522f3663b0f158f3a005f6476e11adf87e68e9))
+
+### Refactor
+
+- _(command)_ parse `/sub` flags into `store.Sub` - ([33675f2](https://github.com/deadnews/rss2tg/commit/33675f285ab02e7711e1a4d591ce0859a5183ae6))
+- _(filter)_ match and dedupe terms with `slices` - ([23690ca](https://github.com/deadnews/rss2tg/commit/23690ca2650b7bdd5313416b214068b13e08373d))
+- tidy small idioms and log wording - ([58bbc62](https://github.com/deadnews/rss2tg/commit/58bbc62ff9822426c031f9451ed90af37712e54c))
+
+### Styling
+
+- break long lines - ([bc480fb](https://github.com/deadnews/rss2tg/commit/bc480fb65d514a179cb5c2b3a98cf33cc91a4c1c))
+
+### Chores
+
+- _(prek)_ build `golangci-lint` with a prek-managed go - ([f1f96c9](https://github.com/deadnews/rss2tg/commit/f1f96c90b743fd714b100681cd6db5251fe35284))
+
+### Dependencies
+
+- update deps - ([91ac96d](https://github.com/deadnews/rss2tg/commit/91ac96d65b2a3e8fce1d904ef8fc96854298db2b))
+
 ## [0.3.1](https://github.com/deadnews/rss2tg/compare/v0.3.0...v0.3.1) - 2026-09-29
 
 ### Bug fixes
