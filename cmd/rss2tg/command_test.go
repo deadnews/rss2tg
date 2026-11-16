@@ -634,31 +634,31 @@ func TestParseSubArgs(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
-		want parsedSubArgs
+		want store.Sub
 		ok   bool
 	}{
 		{
 			name: "empty defaults to link",
 			args: nil,
-			want: parsedSubArgs{format: formatLink},
+			want: store.Sub{Format: formatLink},
 			ok:   true,
 		},
 		{
 			name: "format only",
 			args: []string{"pw"},
-			want: parsedSubArgs{format: "pw"},
+			want: store.Sub{Format: "pw"},
 			ok:   true,
 		},
 		{
 			name: "all options any order",
 			args: []string{"include:go,rust", "shorts", "nolive", "latest", "exclude:Crypto,AI", "pw"},
-			want: parsedSubArgs{
-				format:  "pw",
-				shorts:  true,
-				noLive:  true,
-				latest:  true,
-				exclude: []string{"crypto", "ai"},
-				include: []string{"go", "rust"},
+			want: store.Sub{
+				Format:  "pw",
+				Shorts:  true,
+				NoLive:  true,
+				Latest:  true,
+				Exclude: []string{"crypto", "ai"},
+				Include: []string{"go", "rust"},
 			},
 			ok: true,
 		},

@@ -135,46 +135,36 @@ const (
 	prefixInclude = "include:"
 )
 
-// parsedSubArgs holds optional /sub flags after the URL.
-type parsedSubArgs struct {
-	format  string
-	shorts  bool
-	noLive  bool
-	latest  bool
-	exclude []string
-	include []string
-}
-
-// parseSubArgs parses optional /sub flags in any order.
-func parseSubArgs(args []string) (parsedSubArgs, bool) {
-	out := parsedSubArgs{format: formatLink}
+// parseSubArgs parses optional /sub flags in any order, leaving URL and Title unset.
+func parseSubArgs(args []string) (store.Sub, bool) {
+	sub := store.Sub{Format: formatLink}
 	for _, arg := range args {
 		switch {
 		case arg == "shorts":
-			out.shorts = true
+			sub.Shorts = true
 		case arg == "nolive":
-			out.noLive = true
+			sub.NoLive = true
 		case arg == "latest":
-			out.latest = true
+			sub.Latest = true
 		case validFormats[arg]:
-			out.format = arg
+			sub.Format = arg
 		case strings.HasPrefix(arg, prefixExclude):
 			words, ok := parseFilterArg(arg[len(prefixExclude):])
 			if !ok {
-				return parsedSubArgs{}, false
+				return store.Sub{}, false
 			}
-			out.exclude = words
+			sub.Exclude = words
 		case strings.HasPrefix(arg, prefixInclude):
 			words, ok := parseFilterArg(arg[len(prefixInclude):])
 			if !ok {
-				return parsedSubArgs{}, false
+				return store.Sub{}, false
 			}
-			out.include = words
+			sub.Include = words
 		default:
-			return parsedSubArgs{}, false
+			return store.Sub{}, false
 		}
 	}
-	return out, true
+	return sub, true
 }
 
 func (bot *Bot) handleSub(ctx context.Context, s scope, args []string) {
@@ -183,7 +173,7 @@ func (bot *Bot) handleSub(ctx context.Context, s scope, args []string) {
 		return
 	}
 
-	opts, ok := parseSubArgs(args[1:])
+	sub, ok := parseSubArgs(args[1:])
 	if !ok {
 		bot.reply(ctx, s, subUsage)
 		return
@@ -196,7 +186,7 @@ func (bot *Bot) handleSub(ctx context.Context, s scope, args []string) {
 		return
 	}
 
-	feed, err := bot.parseFeed(ctx, url, opts.latest)
+	feed, err := bot.parseFeed(ctx, url, sub.Latest)
 	if err != nil {
 		slog.Error("Failed to parse feed", "url", url, "error", err)
 		bot.reply(ctx, s, "Failed to subscribe.")
@@ -212,16 +202,7 @@ func (bot *Bot) handleSub(ctx context.Context, s scope, args []string) {
 		s.threadID, s.general = threadID, false
 	}
 
-	sub := store.Sub{
-		URL:     url,
-		Title:   feed.Title,
-		Format:  opts.format,
-		Shorts:  opts.shorts,
-		NoLive:  opts.noLive,
-		Latest:  opts.latest,
-		Exclude: opts.exclude,
-		Include: opts.include,
-	}
+	sub.URL, sub.Title = url, feed.Title
 	existed, err := bot.store.AddSub(s.chatID, s.threadID, &sub)
 	if err != nil {
 		slog.Error("Failed to add subscription", "error", err)
