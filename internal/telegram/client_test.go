@@ -275,6 +275,20 @@ func TestSendMessage(t *testing.T) {
 		var apiErr *APIError
 		assert.NotErrorAs(t, err, &apiErr, "persistent rate limit must not be a permanent APIError")
 	})
+
+	t.Run("server error stays retryable", func(t *testing.T) {
+		c := testClient(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Response[json.RawMessage]{
+				OK: false, ErrorCode: 500, Desc: "Internal Server Error: restart",
+			})
+		})
+
+		err := c.SendMessage(t.Context(), 100, 0, "text", false)
+		require.Error(t, err)
+		var apiErr *APIError
+		assert.NotErrorAs(t, err, &apiErr, "server error must not be a permanent APIError")
+	})
 }
 
 func TestCreateForumTopic(t *testing.T) {

@@ -55,6 +55,7 @@ type linkPreviewOptions struct {
 type Response[T any] struct {
 	OK         bool                `json:"ok"`
 	Result     T                   `json:"result"`
+	ErrorCode  int                 `json:"error_code"`
 	Desc       string              `json:"description"`
 	Parameters *responseParameters `json:"parameters,omitempty"`
 }

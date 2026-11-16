@@ -183,33 +183,27 @@ func (c *Client) postWithRetry(ctx context.Context, method string, payload any) 
 	if err != nil {
 		return err
 	}
-	if result.OK {
-		return nil
+	if wait := result.retryAfter(); wait > 0 {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("%s: %w", method, ctx.Err())
+		case <-time.After(wait):
+		}
+		result, err = c.post(ctx, method, body)
+		if err != nil {
+			return err
+		}
 	}
 
-	wait := result.retryAfter()
-	if wait == 0 {
+	switch {
+	case result.OK:
+		return nil
+	case result.retryAfter() > 0 || result.ErrorCode >= http.StatusInternalServerError:
+		// Rate limits and server errors are transient: the caller retries, not drops.
+		return fmt.Errorf("%s: %s", method, result.Desc)
+	default:
 		return &APIError{Method: method, Desc: result.Desc}
 	}
-
-	select {
-	case <-ctx.Done():
-		return fmt.Errorf("%s: %w", method, ctx.Err())
-	case <-time.After(wait):
-	}
-
-	result, err = c.post(ctx, method, body)
-	if err != nil {
-		return err
-	}
-	if result.OK {
-		return nil
-	}
-	// Still rate-limited: transient, retry next cycle rather than dropping.
-	if result.retryAfter() > 0 {
-		return fmt.Errorf("%s: %s", method, result.Desc)
-	}
-	return &APIError{Method: method, Desc: result.Desc}
 }
 
 func (c *Client) post(ctx context.Context, method string, body []byte) (*Response[json.RawMessage], error) {
