@@ -62,10 +62,10 @@ func LatestURL(feedURL string) (string, bool) {
 	return u.String(), true
 }
 
-// ResolveLatest returns the release page feedURL redirects to,
+// ResolveLatest returns the release page latestURL redirects to,
 // matching the Atom entry link; empty when no release is labeled latest.
-func ResolveLatest(ctx context.Context, feedURL string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, feedURL, http.NoBody)
+func ResolveLatest(ctx context.Context, latestURL string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, latestURL, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("build request: %w", err)
 	}

@@ -94,7 +94,7 @@ func (bot *Bot) Run(ctx context.Context) error {
 }
 
 func (bot *Bot) pollUpdates(ctx context.Context) {
-	defer slog.Info("Stopping update polling")
+	defer slog.Info("Update polling stopped")
 
 	var offset int64
 	for {
@@ -144,7 +144,7 @@ func (bot *Bot) checkFeedsLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			slog.Info("Stopping feed check loop")
+			slog.Info("Feed check loop stopped")
 			return
 		case <-feedTicker.C:
 			bot.checkFeeds(ctx)

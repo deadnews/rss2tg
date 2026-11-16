@@ -122,9 +122,7 @@ func (s *Store) RemoveSub(chatID int64, threadID int, feedURL string) (bool, err
 		if chat == nil {
 			return nil
 		}
-		if chat.Get([]byte(feedURL)) != nil {
-			existed = true
-		}
+		existed = chat.Get([]byte(feedURL)) != nil
 		return chat.Delete([]byte(feedURL))
 	})
 	if err != nil {

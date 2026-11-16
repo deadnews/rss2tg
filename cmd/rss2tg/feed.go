@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -194,11 +195,5 @@ func (bot *Bot) videoInfo(ctx context.Context, link string) *youtube.VideoInfo {
 }
 
 func itemGUID(item *gofeed.Item) string {
-	if item.GUID != "" {
-		return item.GUID
-	}
-	if item.Link != "" {
-		return item.Link
-	}
-	return item.Title + "-" + item.Published
+	return cmp.Or(item.GUID, item.Link, item.Title+"-"+item.Published)
 }

@@ -86,11 +86,8 @@ func (bot *Bot) handleCommand(ctx context.Context, msg *telegram.Message) {
 		return
 	}
 
-	cmd := parts[0]
 	// Strip @botname suffix (e.g. "/help@mybot").
-	if i := strings.IndexByte(cmd, '@'); i > 0 {
-		cmd = cmd[:i]
-	}
+	cmd, _, _ := strings.Cut(parts[0], "@")
 	if !strings.HasPrefix(cmd, "/") {
 		return
 	}
@@ -492,7 +489,7 @@ func (bot *Bot) reply(ctx context.Context, s scope, text string) {
 	for _, chunk := range splitMessages(text, format.MessageLimit) {
 		chunk = format.TruncateHTML(chunk, format.MessageLimit)
 		if err := bot.tg.SendMessage(ctx, s.chatID, s.threadID, chunk, true); err != nil {
-			slog.Error("Failed to send message", "error", err, "chat_id", s.chatID)
+			slog.Error("Failed to send message", "chat_id", s.chatID, "error", err)
 		}
 	}
 }
